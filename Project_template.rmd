@@ -1,0 +1,59 @@
+---
+title: "Project template"
+author: "Anonymous"
+output: 
+  pdf_document: 
+    toc: yes
+    toc_depth: 1
+---
+
+# 1. Introduction
+
+(motivate the problem and )
+
+# 2. Dataset description
+
+
+# 3. Model description
+
+
+## 3.1 Prior choices
+
+(these are good priors because referece to something)
+
+## 3.2 Running the model
+
+(amount of chains etc and the final fit)
+
+
+# 4. Convergences diagnostics
+
+
+# 5. Posterior predictive checking
+
+
+
+# 6. Model comparison
+
+
+# 7. Predictive performance assesment
+
+
+# 8. Sensitivity analysis
+
+
+
+# 9. Discussion
+
+
+
+
+
+
+
+
+
+
+
+
+
