@@ -1,0 +1,195 @@
+---
+title: "BDA - Project"
+author: "Anonymous"
+output: 
+  pdf_document: 
+    toc: yes
+    toc_depth: 1
+---
+
+
+<!--More information on how to use markdown, see [this](https://github.com/adam-p/markdown-here/wiki/Markdown-Cheatsheet) and more information on R markdown can be found [here](https://www.rstudio.com/wp-content/uploads/2015/02/rmarkdown-cheatsheet.pdf).
+
+Also, _R Markdown: The Definite Guide_, an extensive book on R Markdown can be found [here](https://bookdown.org/yihui/rmarkdown/).-->
+
+
+```{r setup, include=FALSE}
+# This chunk just sets echo = TRUE as default (i.e. print all code)
+knitr::opts_chunk$set(echo = TRUE)
+library(ggplot2)
+library(matrixStats)
+# downloaded from https://www.kaggle.com/aungpyaeap/fish-market
+fish <- read.csv(file="Fish.csv", header = TRUE)
+
+library(rstan)
+options(mc.cores = parallel::detectCores())
+rstan_options(auto_write = TRUE)
+```
+
+
+# Exercise 1
+
+```{r}
+set.seed(001) # just to make it reproducible
+fish <- fish[sample(1:nrow(fish)),]
+fish
+
+fish_x <- matrix(c(fish$Length1, fish$Length2, fish$Length3, fish$Height, fish$Width), 159)
+fish_list <- list(N=100, N2=59, K=5, y=head(fish$Weight, 100), X=head(fish_x, 100), new_X=tail(fish_x, 59))
+```
+```{r}
+head(fish_x)
+```
+
+```{stan, output.var="stan_fish"}
+/*
+*Simple normal regression example
+*/
+
+data {
+  int N; //the number of observations
+  int N2; //the size of the new_X matrix
+  int K; //the number of columns in the model matrix
+  real y[N]; //the response
+  matrix[N,K] X; //the model matrix
+  matrix[N2,K] new_X; //the matrix for the predicted values
+}
+parameters {
+  vector[K] beta; //the regression parameters
+  real alpha; //the regression parameters
+  real sigma; //the standard deviation
+}
+transformed parameters {
+  vector[N] linpred;
+  linpred = alpha + X*beta;
+}
+model {  
+  //beta[1] ~ cauchy(0,10); 
+  alpha ~ cauchy(0,10);//prior for the intercept following Gelman 2008
+
+  for(i in 1:K)
+    beta[i] ~ cauchy(0,2.5);//prior for the slopes following Gelman 2008
+    
+  
+  y ~ normal(linpred,sigma);
+}
+generated quantities {
+  vector[N2] y_pred;
+  y_pred = alpha + new_X*beta; //the y values predicted by the model
+}
+
+```
+
+
+```{r}
+stan_fish_stuff <- sampling(stan_fish, data = fish_list)# refresh=0)
+```
+```{r}
+#stan_fish_stuff
+```
+
+```{r}
+
+x_i = 5
+
+plot(fish_x[,x_i], fish$Weight)
+
+line_y = colQuantiles(extract(stan_fish_stuff)$y_pred, probs = 0.5)
+line_y_top = colQuantiles(extract(stan_fish_stuff)$y_pred, probs = 0.95)
+line_y_bot = colQuantiles(extract(stan_fish_stuff)$y_pred, probs = 0.05)
+
+points(tail(fish_x, 59)[,x_i], line_y, col="blue")
+points(tail(fish_x, 59)[,x_i], line_y_top, col="green")
+points(tail(fish_x, 59)[,x_i], line_y_bot, col="red")
+
+#hist(extract(stan_drowning)$ypred, breaks=50, xlab = "Predicted drownings in 2019", main = "Predicted drownings in 2019")
+#hist(extract(stan_drowning)$beta, breaks=50, xlab = "Beta", main = "Beta")
+
+
+ggplot() + 
+  geom_point(aes(x=tail(fish_x, 59)[,x_i], y=tail(fish$Weight, 59)), size=0.1) +
+  geom_line(aes(x=tail(fish_x, 59)[,x_i], y=line_y), size=0.1, col="blue") +
+  geom_line(aes(x=tail(fish_x, 59)[,x_i], y=line_y_top), size=0.1, col="green") +
+  geom_line(aes(x=tail(fish_x, 59)[,x_i], y=line_y_bot), size=0.1, col="red") +
+  ggtitle("Pooled linear regression model (ax + b)") +
+  #ggplot2::xlab('alpha') + 
+  ggplot2::ylab('weight')
+
+```
+
+
+```{stan, output.var="fish_non_lin"}
+/*
+*Simple normal regression example
+*/
+
+data {
+  int N; //the number of observations
+  int N2; //the size of the new_X matrix
+  int K; //the number of columns in the model matrix
+  real y[N]; //the response
+  matrix[N,K] X; //the model matrix
+  matrix[N2,K] new_X; //the matrix for the predicted values
+}
+parameters {
+  vector[K] beta; //the regression parameters
+  vector[K] ceta; //the regression parameters
+  real alpha; //the regression parameters
+  real sigma; //the standard deviation
+}
+transformed parameters {
+  vector[N] linpred;
+  linpred = alpha + X*beta + X .* X * ceta;
+}
+model {  
+  //beta[1] ~ cauchy(0,10); 
+  alpha ~ cauchy(0,10);//prior for the intercept following Gelman 2008
+
+  for(i in 1:K)
+    beta[i] ~ cauchy(0,2.5);//prior for the slopes following Gelman 2008
+  
+  for(i in 1:K)
+    ceta[i] ~ cauchy(0,2.5);//prior for the slopes following Gelman 2008
+    
+  
+  y ~ normal(linpred,sigma);
+}
+generated quantities {
+  vector[N2] y_pred;
+  y_pred = alpha + new_X*beta + new_X .* new_X * ceta; //the y values predicted by the model
+}
+```
+
+
+```{r}
+stan_fish_stuff_2 <- sampling(fish_non_lin, data = fish_list)# refresh=0)
+```
+
+
+```{r}
+x_i = 5
+
+plot(fish_x[,x_i], fish$Weight)
+
+line_y = colQuantiles(extract(stan_fish_stuff_2)$y_pred, probs = 0.5)
+line_y_top = colQuantiles(extract(stan_fish_stuff_2)$y_pred, probs = 0.95)
+line_y_bot = colQuantiles(extract(stan_fish_stuff_2)$y_pred, probs = 0.05)
+
+points(tail(fish_x, 59)[,x_i], line_y, col="blue")
+points(tail(fish_x, 59)[,x_i], line_y_top, col="green")
+points(tail(fish_x, 59)[,x_i], line_y_bot, col="red")
+
+ggplot() + 
+  geom_point(aes(x=tail(fish_x, 59)[,x_i], y=tail(fish$Weight, 59)), size=0.1) +
+  geom_line(aes(x=tail(fish_x, 59)[,x_i], y=line_y), size=0.1, col="blue") +
+  geom_line(aes(x=tail(fish_x, 59)[,x_i], y=line_y_top), size=0.1, col="green") +
+  geom_line(aes(x=tail(fish_x, 59)[,x_i], y=line_y_bot), size=0.1, col="red") +
+  ggtitle("Pooled nonlinear regression model (ax^2 + bx + c)") +
+  #ggplot2::xlab('alpha') + 
+  ggplot2::ylab('weight')
+```
+
+
+<!--If you are new to LaTeX equations, you could use the [latext4technics](https://www.latex4technics.com/) equation editor to create LaTeX equations to include in the report.
+
+More information on using LaTeX in R markdown can be found in 2.5.3 in [R Markdown: The Definite Guide](https://bookdown.org/yihui/rmarkdown/).-->
