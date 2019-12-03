@@ -20,6 +20,7 @@ https://www.kaggle.com/harlfoxem/housesalesprediction
 
 ```{r}
 library(rstan)
+options(mc.cores = parallel::detectCores())
 library(ggplot2)
 library(dplyr)
 library(GGally)
@@ -34,25 +35,37 @@ library(reshape2)
 houseprice = read.csv("data/kc_house_data.csv", header = TRUE)
 head(houseprice)
 ```
-
 ```{r}
+#https://stats.stackexchange.com/questions/8071/how-to-choose-between-pearson-and-spearman-correlation
 houseprice = houseprice[,3:21]
-  
+M <- cor(houseprice, method="pearson")
+corrplot(M, method = "circle")
 ```
 
+
+
+
 ```{r}
-#pearson correlation matrix
-M <- cor(houseprice)
+M <- cor(houseprice, method="spearman")
 corrplot(M, method = "circle")
 ```
 
 ```{r}
-#ggpairs(houseprice  %>% select(price, bathrooms, sqft_living))
-ggpairs(houseprice, columns = c("price", "bathrooms"), ggplot2::aes(colour=zipcode)) 
-
+M <- cor(houseprice, method="kendall")
+corrplot(M, method = "circle")
 ```
 
 
+
+
+```{r}
+#ggpairs(houseprice  %>% select(price, bathrooms, sqft_living))
+#houseprice_zipped <- houseprice
+#houseprice_zipped$zipcode <- as.factor(houseprice_zipped$zipcode)
+#ggpairs(houseprice_zipped, columns = c(1,2,3,4), ggplot2::aes(colour=zipcode)) 
+ggpairs(houseprice  %>% select(price, bathrooms, sqft_living, grade, sqft_above, sqft_living15))
+
+```
 
 # 3. Model description
 
@@ -61,7 +74,51 @@ ggpairs(houseprice, columns = c("price", "bathrooms"), ggplot2::aes(colour=zipco
 
 (these are good priors because referece to something)
 
-## 3.2 Running the model
+
+```{r}
+hist(houseprice$price)
+hist(houseprice$bathrooms)
+hist(houseprice$sqft_living)
+hist(houseprice$grade)
+hist(houseprice$sqft_living15)
+```
+
+## 3.2 Stan models
+
+```{r}
+
+cat(readLines('models/multiple_linear.stan'), sep='\n')
+
+```
+
+```{r}
+houseprice_small =houseprice[0:1000,]
+
+X_var = houseprice_small[,2:6]
+y_var = houseprice_small$price
+  
+data_list = list(
+  X = X_var,
+  K = ncol(X_var),
+  N = nrow(X_var),
+  y = y_var
+)
+
+```
+
+
+```{r}
+multiple_linear_fit <- stan(file = 'models/multiple_linear.stan', data = data_list)
+
+
+```
+```{r}
+print(multiple_linear_fit)
+
+```
+
+
+## 3.3 Running the model
 
 (amount of chains etc and the final fit)
 
