@@ -11,7 +11,47 @@ output:
 
 (motivate the problem and )
 
+
+https://www.kaggle.com/harlfoxem/housesalesprediction
+
+
+
 # 2. Dataset description
+
+```{r}
+library(rstan)
+library(ggplot2)
+library(dplyr)
+library(GGally)
+library(corrplot)
+library(reshape2)
+
+```
+
+
+
+```{r}
+houseprice = read.csv("data/kc_house_data.csv", header = TRUE)
+head(houseprice)
+```
+
+```{r}
+houseprice = houseprice[,3:21]
+  
+```
+
+```{r}
+#pearson correlation matrix
+M <- cor(houseprice)
+corrplot(M, method = "circle")
+```
+
+```{r}
+#ggpairs(houseprice  %>% select(price, bathrooms, sqft_living))
+ggpairs(houseprice, columns = c("price", "bathrooms"), ggplot2::aes(colour=zipcode)) 
+
+```
+
 
 
 # 3. Model description
