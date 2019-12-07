@@ -186,6 +186,13 @@ p
 # 4. Convergences diagnostics
 
 
+
+
+
+
+
+
+
 # 5. Posterior predictive checking
 
 ```{r}

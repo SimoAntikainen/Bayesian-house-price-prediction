@@ -1,0 +1,335 @@
+---
+title: "nonlinear"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# 1. Introduction
+
+(motivate the problem and )
+
+https://www.kaggle.com/harlfoxem/housesalesprediction
+
+
+```{r}
+library(rstan)
+options(mc.cores = 4)#parallel::detectCores())
+library(ggplot2)
+library(matrixStats)
+library(dplyr)
+library(GGally)
+library(corrplot)
+library(reshape2)
+library(ElemStatLearn)
+library(glmnet)
+library(plotmo)
+library(Metrics)
+library(bayesplot)
+library(loo)
+```
+
+# 2. Dataset description
+
+```{r}
+houseprice = read.csv("data/kc_house_data.csv", header = TRUE)
+
+#drop colinear columns sqft_living = sqft_above + sqft_basement
+houseprice = subset(houseprice, select = -c(sqft_above, sqft_basement))
+
+houseprice$log_price = log(houseprice$price)
+datecol <- as.POSIXct(houseprice$date, format="%Y%m%dT%H%M%S")
+houseprice$date_num = as.numeric(datecol)
+unique_zips = unique(houseprice$zipcode)
+houseprice$mutated_zipcode = match(houseprice$zipcode,  unique_zips)
+head(houseprice)
+```
+
+```{r}
+M <- cor(houseprice[-2], method="spearman")
+corrplot(M, method = "circle")
+```
+
+```{r}
+houseprice_scaled <- mutate_if(houseprice, is.numeric, list(~scale(.) %>% as.vector))
+```
+
+```{R}
+response = houseprice_scaled[3]
+obs = houseprice_scaled[4:19]
+ridge_regression <- glmnet(y=data.matrix(response), x=data.matrix(obs), alpha = 1)
+plot_glmnet(ridge_regression, xvar = "lambda", label = TRUE)
+```
+
+```{r}
+#ggpairs(houseprice  %>% select(price, bathrooms, sqft_living))
+#houseprice_zipped <- houseprice
+#houseprice_zipped$zipcode <- as.factor(houseprice_zipped$zipcode)
+#ggpairs(houseprice_zipped, columns = c(1,2,3,4), ggplot2::aes(colour=zipcode)) 
+ggpairs(houseprice  %>% select(price, sqft_living, grade, lat, view, waterfront, yr_built))
+#ggpairs(houseprice, columns = c("log_price", "bathrooms"), ggplot2::aes(colour=factor(as.integer(lat*20)), alpha=0.75)) 
+```
+
+# 3. Model description
+
+
+## 3.1 Prior choices
+
+(these are good priors because referece to something)
+
+
+## 3.2 Stan models
+
+
+### Grouped multiple linear
+
+```{r}
+cat(readLines('models/grouped_multiple_linear.stan'), sep='\n')
+```
+
+### Grouped multiple polynomial
+
+```{r}
+
+cat(readLines('models/grouped_multiple_polynomial.stan'), sep='\n')
+```
+
+## 3.3 Running the models
+
+(amount of chains etc and the final fit)
+
+
+```{r}
+#usable_numeric_columns = c("date_num", "lat", "long", "yr_built", "sqft_basement", "sqft_above", "grade", "condition", "view", "waterfront", #"floors", "sqft_lot", "sqft_living", "bathrooms", "bedrooms")
+#usable_numeric_columns = c("sqft_living", "grade","lat")
+usable_numeric_columns = c("sqft_living", "grade", "lat", "view", "waterfront", "yr_built")
+```
+
+```{r}
+training_indices = 0:1000
+testing_indices = 1001:1200
+
+used_columns = usable_numeric_columns
+target_column = c("log_price")
+group_column =  c("mutated_zipcode")
+original_target = houseprice[,target_column]
+training_data = houseprice_scaled[training_indices,used_columns]
+testing_data =  houseprice_scaled[testing_indices, used_columns]
+training_target = houseprice_scaled[training_indices,target_column]
+testing_target_scaled =  houseprice_scaled[testing_indices, target_column]
+testing_target =  houseprice[testing_indices, target_column]
+
+X_var = training_data
+X_var_pred = testing_data
+y_var = training_target
+group_var = houseprice[training_indices,group_column]
+group_var_pred = houseprice[testing_indices,group_column]
+  
+data_list = list(
+  X = X_var,
+  X_pred = X_var_pred,
+  K = ncol(X_var),
+  N = nrow(X_var),
+  N_pred = nrow(X_var_pred),
+  N_groups = length(unique_zips),
+  y = y_var,
+  groups = group_var,
+  groups_pred  = group_var_pred
+)
+head(X_var)
+```
+
+
+### Grouped multiple linear
+
+
+```{r}
+multiple_linear_fit <- stan(file = 'models/grouped_multiple_linear.stan', data = data_list)
+```
+
+
+```{r}
+denormalize_results <- function(new_values, sd, mean){
+  return (new_values * sd + mean)
+}
+```
+
+```{r}
+predicted_draws = extract(multiple_linear_fit)$y_pred
+predicted_raws = colQuantiles(predicted_draws, probs = c(0.05, 0.5, 0.95))
+predicted_prices = denormalize_results(predicted_raws, sd(original_target), mean(original_target))
+```
+
+
+```{r}
+result_testing = data.frame(price = testing_target, predicted = predicted_prices)
+ggpairs(result_testing, columns = c("price", "predicted.50."))#, #ggplot2::aes(colour=factor(as.integer(lat*20)), alpha=0.75)) 
+```
+
+
+```{r}
+mae(exp(testing_target),exp(predicted_prices))
+```
+
+
+
+### Grouped multiple polynomial
+
+```{r}
+X_var_second = X_var^2
+X_var_pred_second = X_var_pred^2
+data_list = list(
+  X = X_var,
+  X_second = X_var_second,
+  X_pred = X_var_pred,
+  X_pred_second = X_var_pred_second,
+  K = ncol(X_var),
+  N = nrow(X_var),
+  N_pred = nrow(X_var_pred),
+  N_groups = length(unique_zips),
+  y = y_var,
+  groups = group_var,
+  groups_pred  = group_var_pred
+)
+```
+
+
+
+```{r}
+multiple_polynomial_fit <- stan(file = 'models/grouped_multiple_polynomial.stan', data = data_list)
+```
+
+```{r}
+predicted_draws = extract(multiple_polynomial_fit)$y_pred
+predicted_raws = colQuantiles(predicted_draws, probs = c(0.05, 0.5, 0.95))
+predicted_prices = denormalize_results(predicted_raws, sd(original_target), mean(original_target))
+```
+
+
+```{r}
+result_testing = data.frame(price = testing_target, predicted = predicted_prices)
+ggpairs(result_testing, columns = c("price", "predicted.50."))#, #ggplot2::aes(colour=factor(as.integer(lat*20)), alpha=0.75)) 
+```
+
+
+```{r}
+mae(exp(testing_target),exp(predicted_prices))
+```
+
+
+# 4. Convergences diagnostics
+
+
+## Grouped multiple linear
+
+```{r}
+print(multiple_linear_fit)
+```
+
+```{R}
+posterior_divergences <- as.array(multiple_linear_fit)
+mcmc_trace(multiple_linear_fit, regex_pars = "beta")
+```
+
+## Grouped multiple polynomial
+
+
+```{r}
+print(multiple_polynomial_fit)
+```
+
+
+```{R}
+#posterior_divergences <- as.array(multiple_polynomial_fit)
+#np = nuts_params(posterior_divergences)
+mcmc_trace(multiple_polynomial_fit, regex_pars = "beta")
+```
+
+
+# 5. Posterior predictive checking
+
+#demo_6_1
+
+# 6. Model comparison
+
+
+# 7. Predictive performance assesment
+
+assignment 8 
+
+## PSIS_LOO and k-values
+
+### Multiple linear regression
+
+```{r}
+# Extract log-likelihood
+multiple_linear_log_lik <- extract_log_lik(multiple_linear_fit, merge_chains = FALSE)
+
+# PSIS-LOO elpd values
+r_eff <- relative_eff(exp(multiple_linear_log_lik))
+multiple_linear_loo_lin <- loo(multiple_linear_log_lik, r_eff = r_eff)
+
+#elpd loo
+multiple_linear_loo_lin$elpd_loo
+```
+
+
+```{r}
+pareto_k_table(multiple_linear_loo_lin)
+```
+```{r}
+plot(multiple_linear_loo_lin, diagnostic = c("k", "n_eff"), label_points = FALSE,
+  main = "PSIS diagnostic plot for ther multiple linear model")
+
+```
+
+
+### Multiple polynomial regression
+
+```{r}
+# Extract log-likelihood
+multiple_polynomial_log_lik <- extract_log_lik(multiple_polynomial_fit, merge_chains = FALSE)
+
+# PSIS-LOO elpd values
+r_eff <- relative_eff(exp(multiple_polynomial_log_lik))
+multiple_polynomial_loo_lin <- loo(multiple_polynomial_log_lik, r_eff = r_eff)
+
+#elpd loo
+multiple_polynomial_loo_lin$elpd_loo
+```
+
+```{r}
+pareto_k_table(multiple_polynomial_loo_lin)
+```
+
+```{r}
+plot(multiple_polynomial_loo_lin, diagnostic = c("k", "n_eff"), label_points = FALSE,
+  main = "PSIS diagnostic plot for ther multiple polynomial model")
+```
+
+## p_eff values
+
+```{R}
+print(multiple_linear_loo_lin$p_loo)
+print(multiple_polynomial_loo_lin$p_loo)
+```
+
+# 8. Sensitivity analysis
+
+
+
+# 9. Discussion
+
+
+
+
+
+
+
+
+
+
+
+
