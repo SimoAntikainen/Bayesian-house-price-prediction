@@ -37,6 +37,9 @@ library(Metrics)
 
 library(bayesplot)
 
+library(loo)
+
+
 ```
 
 
@@ -276,6 +279,62 @@ mcmc_trace(multiple_polynomial_fit, regex_pars = "beta")
 
 # 7. Predictive performance assesment
 
+assignment 8 
+
+## PSIS_LOO and k-values
+
+### Multiple linear regression
+
+```{r}
+# Extract log-likelihood
+multiple_linear_log_lik <- extract_log_lik(multiple_linear_fit, merge_chains = FALSE)
+
+# PSIS-LOO elpd values
+r_eff <- relative_eff(exp(multiple_linear_log_lik))
+multiple_linear_loo_lin <- loo(multiple_linear_log_lik, r_eff = r_eff)
+
+#elpd loo
+multiple_linear_loo_lin$elpd_loo
+```
+```{r}
+pareto_k_table(multiple_linear_loo_lin)
+```
+```{r}
+plot(multiple_linear_loo_lin, diagnostic = c("k", "n_eff"), label_points = FALSE,
+  main = "PSIS diagnostic plot for ther multiple linear model")
+
+```
+
+
+### Multiple polynomial regression
+
+```{r}
+# Extract log-likelihood
+multiple_polynomial_log_lik <- extract_log_lik(multiple_polynomial_fit, merge_chains = FALSE)
+
+# PSIS-LOO elpd values
+r_eff <- relative_eff(exp(multiple_polynomial_log_lik))
+multiple_polynomial_loo_lin <- loo(multiple_polynomial_log_lik, r_eff = r_eff)
+
+#elpd loo
+multiple_polynomial_loo_lin$elpd_loo
+```
+
+```{r}
+pareto_k_table(multiple_polynomial_loo_lin)
+```
+
+```{r}
+plot(multiple_polynomial_loo_lin, diagnostic = c("k", "n_eff"), label_points = FALSE,
+  main = "PSIS diagnostic plot for ther multiple polynomial model")
+```
+
+## p_eff values
+
+```{R}
+print(multiple_linear_loo_lin$p_loo)
+print(multiple_polynomial_loo_lin$p_loo)
+```
 
 # 8. Sensitivity analysis
 
