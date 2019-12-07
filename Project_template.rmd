@@ -29,6 +29,7 @@ library(GGally)
 library(corrplot)
 library(reshape2)
 library(loo)
+library(bayesplot)
 ```
 
 
@@ -208,6 +209,16 @@ hist(exp(original_target), breaks = 100)
 #yrep_lin <- posterior_predict(multiple_linear_fit)
 #ppc_loo_pit_overlay(roaches$y, yrep_lin, lw = weights(loo_lin$psis_object))
 ```
+```{r}
+
+loo_lin <- loo(multiple_linear_fit, save_psis = TRUE)
+psis_lin <- loo_lin$psis_object
+lw_lin <- weights(psis_lin)
+pp_check(c(original_target[training_indices]), yrep = replicated_data, fun = "stat")
+ppc_loo_pit_overlay(c(original_target[training_indices]), yrep = replicated_data, lw = lw_lin)
+ppc_loo_ribbon(c(original_target[training_indices]), yrep = replicated_data, lw = lw_lin, psis_object = psis_lin)
+ppc_loo_intervals(c(original_target[training_indices]), yrep = replicated_data, psis_object = psis_lin)
+```
 
 
 # 6. Model comparison
@@ -237,6 +248,8 @@ print(loo_lin)
 
 Wrt using separate beta for each group:
 There are 70 groups, so using a different beta value for each parameter for each group would increase the number of parameters of the model by 2-17 times, likely slowing the model. In addition, the number of data usable for each beta value would shrink. The dataset is large, so using most of the dataset for training, it shouldn't be a problem but with less data it could lead to overfitting. Practically it would mean that there is no relation between the effects of the parameters between different groups, e.g. the size of the building could increase price somewhere and decrease it elsewhere.
+
+some conclusion
 
 
 
