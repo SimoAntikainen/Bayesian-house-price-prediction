@@ -7,35 +7,44 @@ output:
     toc_depth: 1
 ---
 
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
 # 1. Introduction
 
 (motivate the problem and )
 
-
 https://www.kaggle.com/harlfoxem/housesalesprediction
 
 
-
-# 2. Dataset description
-
 ```{r}
 library(rstan)
-library(shinystan)
-options(mc.cores = 1)#parallel::detectCores())
+options(mc.cores = 4)#parallel::detectCores())
 library(ggplot2)
 library(matrixStats)
 library(dplyr)
 library(GGally)
 library(corrplot)
 library(reshape2)
-library(loo)
+library(ElemStatLearn)
+library(glmnet)
+library(plotmo)
+library(Metrics)
 library(bayesplot)
+library(loo)
 ```
 
 
 
+# 2. Dataset description
+
 ```{r}
 houseprice = read.csv("data/kc_house_data.csv", header = TRUE)
+
+#drop colinear columns sqft_living = sqft_above + sqft_basement
+houseprice = subset(houseprice, select = -c(sqft_above, sqft_basement))
+
 houseprice$log_price = log(houseprice$price)
 datecol <- as.POSIXct(houseprice$date, format="%Y%m%dT%H%M%S")
 houseprice$date_num = as.numeric(datecol)
@@ -43,25 +52,22 @@ unique_zips = unique(houseprice$zipcode)
 houseprice$mutated_zipcode = match(houseprice$zipcode,  unique_zips)
 head(houseprice)
 ```
-```{r}
-#https://stats.stackexchange.com/questions/8071/how-to-choose-between-pearson-and-spearman-correlation
-#houseprice = houseprice[,3:21]
-M <- cor(houseprice[-2], method="pearson")
-corrplot(M, method = "circle")
-```
-
-
-
 
 ```{r}
 M <- cor(houseprice[-2], method="spearman")
 corrplot(M, method = "circle")
 ```
 
+
 ```{r}
-# wow this slow
-M <- cor(houseprice[3:8], method="kendall")
-corrplot(M, method = "circle")
+houseprice_scaled <- mutate_if(houseprice, is.numeric, list(~scale(.) %>% as.vector))
+```
+
+```{R}
+response = houseprice_scaled[3]
+obs = houseprice_scaled[4:19]
+ridge_regression <- glmnet(y=data.matrix(response), x=data.matrix(obs), alpha = 1)
+plot_glmnet(ridge_regression, xvar = "lambda", label = TRUE)
 ```
 
 
@@ -70,7 +76,7 @@ corrplot(M, method = "circle")
 #houseprice_zipped <- houseprice
 #houseprice_zipped$zipcode <- as.factor(houseprice_zipped$zipcode)
 #ggpairs(houseprice_zipped, columns = c(1,2,3,4), ggplot2::aes(colour=zipcode)) 
-ggpairs(houseprice  %>% select(price, bathrooms, sqft_living, grade, sqft_above, sqft_living15))
+ggpairs(houseprice  %>% select(price, sqft_living, grade, lat, view, waterfront, yr_built))
 #ggpairs(houseprice, columns = c("log_price", "bathrooms"), ggplot2::aes(colour=factor(as.integer(lat*20)), alpha=0.75)) 
 ```
 
@@ -79,33 +85,37 @@ ggpairs(houseprice  %>% select(price, bathrooms, sqft_living, grade, sqft_above,
 
 ## 3.1 Prior choices
 
-(these are good priors because referece to something)
-
-
-```{r}
-hist(houseprice$price)
-hist(houseprice$log_price)
-hist(houseprice$bathrooms)
-hist(houseprice$sqft_living)
-hist(houseprice$grade)
-hist(houseprice$sqft_living15)
-```
+In https://github.com/stan-dev/stan/wiki/Prior-Choice-Recommendations#prior-for-linear-regression it is recommended to scale the parameters to unit scale and to use student-t(nu, 0, 1), where 3<nu<7, as a prior for linear regression coefficients.
 
 ## 3.2 Stan models
 
+
+### Grouped multiple linear
+
+```{r}
+cat(readLines('models/grouped_multiple_linear.stan'), sep='\n')
+```
+
+### Grouped multiple polynomial
+
 ```{r}
 
-cat(readLines('models/multiple_linear.stan'), sep='\n')
+cat(readLines('models/grouped_multiple_polynomial.stan'), sep='\n')
+```
 
-```
+
+
+## 3.3 Running the models
+
+(amount of chains etc and the final fit)
+
+
 ```{r}
-# scale the columns to 0 mean and 1 sd
-houseprice_scaled <- mutate_if(houseprice, is.numeric, list(~scale(.) %>% as.vector))
-#colMeans(select_if(houseprice_scaled, is.numeric)) # the means are not exactly 0 but close
-#sapply(select_if(houseprice_scaled, is.numeric), sd)
-#head(houseprice_scaled)
-usable_numeric_columns = c("date_num", "lat", "long", "yr_built", "sqft_basement", "sqft_above", "grade", "condition", "view", "waterfront", "floors", "sqft_lot", "sqft_living", "bathrooms", "bedrooms")
+#usable_numeric_columns = c("date_num", "lat", "long", "yr_built", "sqft_basement", "sqft_above", "grade", "condition", "view", "waterfront", #"floors", "sqft_lot", "sqft_living", "bathrooms", "bedrooms")
+#usable_numeric_columns = c("sqft_living", "grade","lat")
+usable_numeric_columns = c("sqft_living", "grade", "lat", "view", "waterfront", "yr_built")
 ```
+
 
 ```{r}
 training_indices = 0:1000
@@ -142,32 +152,46 @@ head(X_var)
 ```
 
 
-```{r}
-multiple_linear_fit <- stan(file = 'models/grouped_multiple_linear.stan', data = data_list, max_treedepth=12)
-```
+
+### Grouped multiple linear
+
 
 ```{r}
-print(multiple_linear_fit)
+multiple_linear_fit <- stan(file = 'models/grouped_multiple_linear.stan', data = data_list)
 ```
+
+
 ```{r}
 denormalize_results <- function(new_values, sd, mean){
   return (new_values * sd + mean)
 }
+orig_sd = sd(original_target)
+orig_mean = mean(original_target)
 ```
 
 ```{r}
 predicted_draws = extract(multiple_linear_fit)$y_pred
 predicted_raws = colQuantiles(predicted_draws, probs = c(0.05, 0.5, 0.95))
-predicted_prices = denormalize_results(predicted_raws, sd(original_target), mean(original_target))
+predicted_prices = denormalize_results(predicted_raws, orig_sd, orig_mean)
 ```
+
+
 ```{r}
-result_testing = data.frame(price = houseprice[testing_indices, "price"], predicted = exp(predicted_prices))
+result_testing = data.frame(price = testing_target, predicted = predicted_prices)
 ggpairs(result_testing, columns = c("price", "predicted.50."))#, #ggplot2::aes(colour=factor(as.integer(lat*20)), alpha=0.75)) 
 ```
+
+
+```{r}
+mae_lin = mae(exp(testing_target),exp(predicted_prices))
+mae_lin
+```
+
+
  
 ```{r}
 violin_predicted = extract(multiple_linear_fit)$y_pred
-violin_predicted = exp(denormalize_results(violin_predicted, sd(original_target), mean(original_target)))
+violin_predicted = exp(denormalize_results(violin_predicted, orig_sd, orig_mean))
 #violin_predicted = exp(predicted_prices)
 violin_groups = outer(1:nrow(violin_predicted), 1:ncol(violin_predicted), FUN=function(r,c) unique_zips[group_var_pred[c]] )
 violin_predicted = c(t(violin_predicted))
@@ -177,16 +201,81 @@ violin_data_list_thing = data.frame(price=violin_predicted, group=violin_groups)
 p <- ggplot(violin_data_list_thing, aes(x=group, y=price)) + 
   geom_violin()
 p
-#head(violin_predicted$y_pred)
 ```
-## 3.3 Running the model
 
-(amount of chains etc and the final fit)
+### Grouped multiple polynomial
+
+```{r}
+X_var_second = X_var^2
+X_var_pred_second = X_var_pred^2
+data_list = list(
+  X = X_var,
+  X_second = X_var_second,
+  X_pred = X_var_pred,
+  X_pred_second = X_var_pred_second,
+  K = ncol(X_var),
+  N = nrow(X_var),
+  N_pred = nrow(X_var_pred),
+  N_groups = length(unique_zips),
+  y = y_var,
+  groups = group_var,
+  groups_pred  = group_var_pred
+)
+```
 
 
-# 4. Convergences diagnostics
+
+```{r}
+multiple_polynomial_fit <- stan(file = 'models/grouped_multiple_polynomial.stan', data = data_list)
+```
+
+```{r}
+predicted_draws = extract(multiple_polynomial_fit)$y_pred
+predicted_raws = colQuantiles(predicted_draws, probs = c(0.05, 0.5, 0.95))
+predicted_prices = denormalize_results(predicted_raws, orig_sd, orig_mean)
+```
 
 
+```{r}
+result_testing = data.frame(price = testing_target, predicted = predicted_prices)
+ggpairs(result_testing, columns = c("price", "predicted.50."))#, #ggplot2::aes(colour=factor(as.integer(lat*20)), alpha=0.75)) 
+```
+
+
+```{r}
+mae_pol = mae(exp(testing_target),exp(predicted_prices))
+mae_pol
+```
+
+
+# 4. Convergence diagnostics
+
+
+
+## Grouped multiple linear
+
+```{r}
+print(multiple_linear_fit)
+```
+
+```{R}
+posterior_divergences <- as.array(multiple_linear_fit)
+mcmc_trace(multiple_linear_fit, regex_pars = "beta")
+```
+
+## Grouped multiple polynomial
+
+
+```{r}
+print(multiple_polynomial_fit)
+```
+
+
+```{R}
+#posterior_divergences <- as.array(multiple_polynomial_fit)
+#np = nuts_params(posterior_divergences)
+mcmc_trace(multiple_polynomial_fit, regex_pars = "beta")
+```
 
 
 
@@ -197,17 +286,13 @@ p
 # 5. Posterior predictive checking
 
 ```{r}
-replicated_data = denormalize_results(extract(multiple_linear_fit)$y_rep, sd(original_target), mean(original_target))
+replicated_data = denormalize_results(extract(multiple_linear_fit)$y_rep, orig_sd, orig_mean)
 #launch_shinystan(multiple_linear_fit)
 p1 = hist(replicated_data, breaks = 50)
 p2 = hist(original_target, breaks = 50)
-#plot( p1, col=rgb(0,0,1,1/4), xlim=c(10,16))  # first histogram
-#plot( p2, col=rgb(1,0,0,1/4), xlim=c(10,16), add=T)  # second
 
 hist(exp(replicated_data), breaks = 50)
 hist(exp(original_target), breaks = 100)
-#yrep_lin <- posterior_predict(multiple_linear_fit)
-#ppc_loo_pit_overlay(roaches$y, yrep_lin, lw = weights(loo_lin$psis_object))
 ```
 ```{r}
 
@@ -226,25 +311,86 @@ ppc_loo_intervals(c(original_target[training_indices]), yrep = replicated_data, 
 Using leave one out (LOO), the linear model has 5 pareto k values between 0.7 and 1, and 11 values between 0.5 and 0.7. The loo values can therefore be slightly biased
 
 ```{r}
-# Extract pointwise log-likelihood and compute LOO
-loo_lin <- loo(multiple_linear_fit, save_psis = TRUE)
-plot(loo_lin, diagnostic = c("k", "n_eff"),
-  label_points = FALSE, main = "PSIS diagnostic plot for linear model")
-print(loo_lin)
+# Compare LOO elpd values, maybe would work better after the 7
+print(compare(x = list(loo_lin, loo_pol)))
+#loo_lin <- loo(multiple_linear_fit, save_psis = TRUE)
+#plot(loo_lin, diagnostic = c("k", "n_eff"),
+#  label_points = FALSE, main = "PSIS diagnostic plot for linear model")
+#print(loo_lin)
 ```
 
 ```{r}
-#print(compare(x = list(loo_lin, loo_non_lin)))
+# compare errors
+data.frame(linear = mae_lin, polynomial = mae_pol)
 ```
 
 # 7. Predictive performance assesment
 
+assignment 8 
+
+## PSIS_LOO and k-values
+
+### Multiple linear regression
+
+```{r}
+# Extract log-likelihood
+multiple_linear_log_lik <- extract_log_lik(multiple_linear_fit, merge_chains = FALSE)
+
+# PSIS-LOO elpd values
+r_eff <- relative_eff(exp(multiple_linear_log_lik))
+multiple_linear_loo_lin <- loo(multiple_linear_log_lik, r_eff = r_eff)
+
+#elpd loo
+multiple_linear_loo_lin$elpd_loo
+```
+
+
+```{r}
+pareto_k_table(multiple_linear_loo_lin)
+```
+```{r}
+plot(multiple_linear_loo_lin, diagnostic = c("k", "n_eff"), label_points = FALSE,
+  main = "PSIS diagnostic plot for ther multiple linear model")
+
+```
+
+
+### Multiple polynomial regression
+
+```{r}
+# Extract log-likelihood
+multiple_polynomial_log_lik <- extract_log_lik(multiple_polynomial_fit, merge_chains = FALSE)
+
+# PSIS-LOO elpd values
+r_eff <- relative_eff(exp(multiple_polynomial_log_lik))
+multiple_polynomial_loo_lin <- loo(multiple_polynomial_log_lik, r_eff = r_eff)
+
+#elpd loo
+multiple_polynomial_loo_lin$elpd_loo
+```
+
+```{r}
+pareto_k_table(multiple_polynomial_loo_lin)
+```
+
+```{r}
+plot(multiple_polynomial_loo_lin, diagnostic = c("k", "n_eff"), label_points = FALSE,
+  main = "PSIS diagnostic plot for ther multiple polynomial model")
+```
+
+## p_eff values
+
+```{R}
+print(multiple_linear_loo_lin$p_loo)
+print(multiple_polynomial_loo_lin$p_loo)
+```
 
 # 8. Sensitivity analysis
 
 
 
 # 9. Discussion
+
 
 Wrt using separate beta for each group:
 There are 70 groups, so using a different beta value for each parameter for each group would increase the number of parameters of the model by 2-17 times, likely slowing the model. In addition, the number of data usable for each beta value would shrink. The dataset is large, so using most of the dataset for training, it shouldn't be a problem but with less data it could lead to overfitting. Practically it would mean that there is no relation between the effects of the parameters between different groups, e.g. the size of the building could increase price somewhere and decrease it elsewhere.
