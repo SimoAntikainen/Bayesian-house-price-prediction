@@ -20,6 +20,7 @@ https://www.kaggle.com/harlfoxem/housesalesprediction
 
 ```{r}
 library(rstan)
+#library(rstanarm)
 options(mc.cores = 4)#parallel::detectCores())
 library(ggplot2)
 library(matrixStats)
@@ -33,6 +34,8 @@ library(glmnet)
 library(plotmo)
 
 library(Metrics)
+
+library(bayesplot)
 
 ```
 
@@ -62,14 +65,6 @@ corrplot(M, method = "circle")
 M <- cor(houseprice[-2], method="spearman")
 corrplot(M, method = "circle")
 ```
-
-```{r}
-# wow this slow
-M <- cor(houseprice[3:8], method="kendall")
-corrplot(M, method = "circle")
-```
-
-
 
 
 ```{r}
@@ -115,9 +110,9 @@ houseprice_scaled <- mutate_if(houseprice, is.numeric, list(~scale(.) %>% as.vec
 #usable_numeric_columns = c("date_num", "lat", "long", "yr_built", "sqft_basement", "sqft_above", "grade", "condition", "view", "waterfront", #"floors", "sqft_lot", "sqft_living", "bathrooms", "bedrooms")
 
 
-usable_numeric_columns = c("date_num", "lat", "long", "yr_built", "grade", "condition", "view", "waterfront", "floors", "sqft_lot", "sqft_living", "bathrooms", "bedrooms")
+#usable_numeric_columns = c("date_num", "lat", "long", "yr_built", "grade", "condition", "view", "waterfront", "floors", "sqft_lot", "sqft_living", #"bathrooms", "bedrooms")
 
-#usable_numeric_columns = c("sqft_living", "grade","lat")
+usable_numeric_columns = c("sqft_living", "grade","lat")
 
 
 ```
@@ -251,18 +246,32 @@ mae(exp(testing_target),exp(predicted_prices))
 
 (amount of chains etc and the final fit)
 
-
-
-
-
 # 4. Convergences diagnostics
+
+
+```{R}
+posterior_divergences <- as.array(multiple_linear_fit)
+mcmc_trace(multiple_linear_fit, regex_pars = "beta")
+```
+
+
+
+
+```{R}
+#posterior_divergences <- as.array(multiple_polynomial_fit)
+#np = nuts_params(posterior_divergences)
+mcmc_trace(multiple_polynomial_fit, regex_pars = "beta")
+```
+
 
 
 # 5. Posterior predictive checking
 
-
+#demo_6_1
 
 # 6. Model comparison
+
+
 
 
 # 7. Predictive performance assesment
