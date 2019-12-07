@@ -20,6 +20,7 @@ https://www.kaggle.com/harlfoxem/housesalesprediction
 
 ```{r}
 library(rstan)
+library(shinystan)
 options(mc.cores = 1)#parallel::detectCores())
 library(ggplot2)
 library(matrixStats)
@@ -27,6 +28,7 @@ library(dplyr)
 library(GGally)
 library(corrplot)
 library(reshape2)
+library(loo)
 ```
 
 
@@ -60,8 +62,6 @@ corrplot(M, method = "circle")
 M <- cor(houseprice[3:8], method="kendall")
 corrplot(M, method = "circle")
 ```
-
-
 
 
 ```{r}
@@ -142,7 +142,7 @@ head(X_var)
 
 
 ```{r}
-multiple_linear_fit <- stan(file = 'models/grouped_multiple_linear.stan', data = data_list)
+multiple_linear_fit <- stan(file = 'models/grouped_multiple_linear.stan', data = data_list, max_treedepth=12)
 ```
 
 ```{r}
@@ -160,10 +160,24 @@ predicted_raws = colQuantiles(predicted_draws, probs = c(0.05, 0.5, 0.95))
 predicted_prices = denormalize_results(predicted_raws, sd(original_target), mean(original_target))
 ```
 ```{r}
-result_testing = data.frame(price = testing_target, predicted = predicted_prices)
+result_testing = data.frame(price = houseprice[testing_indices, "price"], predicted = exp(predicted_prices))
 ggpairs(result_testing, columns = c("price", "predicted.50."))#, #ggplot2::aes(colour=factor(as.integer(lat*20)), alpha=0.75)) 
 ```
+ 
+```{r}
+violin_predicted = extract(multiple_linear_fit)$y_pred
+violin_predicted = exp(denormalize_results(violin_predicted, sd(original_target), mean(original_target)))
+#violin_predicted = exp(predicted_prices)
+violin_groups = outer(1:nrow(violin_predicted), 1:ncol(violin_predicted), FUN=function(r,c) unique_zips[group_var_pred[c]] )
+violin_predicted = c(t(violin_predicted))
+violin_groups = as.factor(c(t(violin_groups)))
+violin_data_list_thing = data.frame(price=violin_predicted, group=violin_groups)
 
+p <- ggplot(violin_data_list_thing, aes(x=group, y=price)) + 
+  geom_violin()
+p
+#head(violin_predicted$y_pred)
+```
 ## 3.3 Running the model
 
 (amount of chains etc and the final fit)
@@ -174,10 +188,36 @@ ggpairs(result_testing, columns = c("price", "predicted.50."))#, #ggplot2::aes(c
 
 # 5. Posterior predictive checking
 
+```{r}
+replicated_data = denormalize_results(extract(multiple_linear_fit)$y_rep, sd(original_target), mean(original_target))
+#launch_shinystan(multiple_linear_fit)
+p1 = hist(replicated_data, breaks = 50)
+p2 = hist(original_target, breaks = 50)
+#plot( p1, col=rgb(0,0,1,1/4), xlim=c(10,16))  # first histogram
+#plot( p2, col=rgb(1,0,0,1/4), xlim=c(10,16), add=T)  # second
+
+hist(exp(replicated_data), breaks = 50)
+hist(exp(original_target), breaks = 100)
+#yrep_lin <- posterior_predict(multiple_linear_fit)
+#ppc_loo_pit_overlay(roaches$y, yrep_lin, lw = weights(loo_lin$psis_object))
+```
 
 
 # 6. Model comparison
 
+Using leave one out (LOO), the linear model has 5 pareto k values between 0.7 and 1, and 11 values between 0.5 and 0.7. The loo values can therefore be slightly biased
+
+```{r}
+# Extract pointwise log-likelihood and compute LOO
+loo_lin <- loo(multiple_linear_fit, save_psis = TRUE)
+plot(loo_lin, diagnostic = c("k", "n_eff"),
+  label_points = FALSE, main = "PSIS diagnostic plot for linear model")
+print(loo_lin)
+```
+
+```{r}
+#print(compare(x = list(loo_lin, loo_non_lin)))
+```
 
 # 7. Predictive performance assesment
 
@@ -188,7 +228,8 @@ ggpairs(result_testing, columns = c("price", "predicted.50."))#, #ggplot2::aes(c
 
 # 9. Discussion
 
-
+Wrt using separate beta for each group:
+There are 70 groups, so using a different beta value for each parameter for each group would increase the number of parameters of the model by 2-17 times, likely slowing the model. In addition, the number of data usable for each beta value would shrink. The dataset is large, so using most of the dataset for training, it shouldn't be a problem but with less data it could lead to overfitting. Practically it would mean that there is no relation between the effects of the parameters between different groups, e.g. the size of the building could increase price somewhere and decrease it elsewhere.
 
 
 
