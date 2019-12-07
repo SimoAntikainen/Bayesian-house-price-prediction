@@ -1,5 +1,5 @@
 ---
-title: "Project template"
+title: "Housing price prediction"
 author: "Anonymous"
 output: 
   pdf_document: 
@@ -13,9 +13,9 @@ knitr::opts_chunk$set(echo = TRUE)
 
 # 1. Introduction
 
-(motivate the problem and )
+Online services such as zillow zestimates [1] provide accuarate information on how much houses sell for using gathered data, providing useful information for the realtor and the person selling the house. This notebook explores the possibilities on using stan to build regression models to predict housing prices on an zipcode level.     
 
-https://www.kaggle.com/harlfoxem/housesalesprediction
+[1] https://www.zillow.com/zestimate/
 
 
 ```{r}
@@ -35,12 +35,17 @@ library(bayesplot)
 library(loo)
 ```
 
-
-
 # 2. Dataset description
+
+For the prediction task we have chosen House Sales in King County, USA dataset [2], which provides data for the houses sold between May 2014 / May 2015 in the area in an regression friendly form.   
+
+[2] https://www.kaggle.com/harlfoxem/housesalesprediction
 
 ```{r}
 houseprice = read.csv("data/kc_house_data.csv", header = TRUE)
+
+#suffle rows to guarantee no row depencies 
+houseprice = houseprice[sample(nrow(houseprice)),]
 
 #drop colinear columns sqft_living = sqft_above + sqft_basement
 houseprice = subset(houseprice, select = -c(sqft_above, sqft_basement))
@@ -58,36 +63,40 @@ M <- cor(houseprice[-2], method="spearman")
 corrplot(M, method = "circle")
 ```
 
-
-```{r}
-houseprice_scaled <- mutate_if(houseprice, is.numeric, list(~scale(.) %>% as.vector))
-```
+As the used dataset contains multiple predictors with linear and non-linear depencies, we use lasso regression to perform variable selection on the dataset to find an smaller subset of predictor variables to use in our model. This is neccessary for the purposes of the notebook to speed up the calculations and to better guarantee convergence. 
 
 ```{R}
+houseprice_scaled <- mutate_if(houseprice, is.numeric, list(~scale(.) %>% as.vector))
+
 response = houseprice_scaled[3]
 obs = houseprice_scaled[4:19]
 ridge_regression <- glmnet(y=data.matrix(response), x=data.matrix(obs), alpha = 1)
 plot_glmnet(ridge_regression, xvar = "lambda", label = TRUE)
 ```
 
+From the lasso regression plot we can see that: sqft_living, grade, lat, view, waterfront and yr_built are the 6 best variables for the model.
+When they are plotted in the matrix plot underneath, we can see that they chosen variables exhibit various linear and nonlinear effects on price.
+We choose all of these variables for the stan model except for the waterfront variable. Waterfront variable is not used as its binary nature causes problems in convergence in the case of polynomial model used.
 
 ```{r}
-#ggpairs(houseprice  %>% select(price, bathrooms, sqft_living))
-#houseprice_zipped <- houseprice
-#houseprice_zipped$zipcode <- as.factor(houseprice_zipped$zipcode)
-#ggpairs(houseprice_zipped, columns = c(1,2,3,4), ggplot2::aes(colour=zipcode)) 
 ggpairs(houseprice  %>% select(price, sqft_living, grade, lat, view, waterfront, yr_built))
-#ggpairs(houseprice, columns = c("log_price", "bathrooms"), ggplot2::aes(colour=factor(as.integer(lat*20)), alpha=0.75)) 
 ```
+
 
 # 3. Model description
 
 
 ## 3.1 Prior choices
 
-In https://github.com/stan-dev/stan/wiki/Prior-Choice-Recommendations#prior-for-linear-regression it is recommended to scale the parameters to unit scale and to use student-t(nu, 0, 1), where 3<nu<7, as a prior for linear regression coefficients.
+In [3] it is recommended to scale the parameters to unit scale and to use student-t(nu, 0, 1), where 3<nu<7, as a prior for linear regression coefficients.
+
+[3] https://github.com/stan-dev/stan/wiki/Prior-Choice-Recommendations#prior-for-linear-regression
 
 ## 3.2 Stan models
+
+We have built the model
+
+[4] https://mc-stan.org/users/documentation/case-studies/radon.html
 
 
 ### Grouped multiple linear
@@ -100,7 +109,7 @@ cat(readLines('models/grouped_multiple_linear.stan'), sep='\n')
 
 ```{r}
 
-cat(readLines('models/grouped_multiple_polynomial.stan'), sep='\n')
+cat(readLines('models/grouped_multiple_polynomial_3.stan'), sep='\n')
 ```
 
 
@@ -113,13 +122,15 @@ cat(readLines('models/grouped_multiple_polynomial.stan'), sep='\n')
 ```{r}
 #usable_numeric_columns = c("date_num", "lat", "long", "yr_built", "sqft_basement", "sqft_above", "grade", "condition", "view", "waterfront", #"floors", "sqft_lot", "sqft_living", "bathrooms", "bedrooms")
 #usable_numeric_columns = c("sqft_living", "grade","lat")
-usable_numeric_columns = c("sqft_living", "grade", "lat", "view", "waterfront", "yr_built")
+#usable_numeric_columns = c("sqft_living", "grade", "lat", "view", "waterfront", "yr_built")
+usable_numeric_columns = c("sqft_living", "grade","view", "lat", "yr_built")
+
 ```
 
 
 ```{r}
 training_indices = 0:1000
-testing_indices = 1001:1200
+testing_indices = 1001:2000
 
 used_columns = usable_numeric_columns
 target_column = c("log_price")
@@ -208,11 +219,18 @@ p
 ```{r}
 X_var_second = X_var^2
 X_var_pred_second = X_var_pred^2
+
+#not used 
+X_var_third = X_var^3
+X_var_pred_third = X_var_pred^3
+
 data_list = list(
   X = X_var,
   X_second = X_var_second,
+  X_third = X_var_third,
   X_pred = X_var_pred,
   X_pred_second = X_var_pred_second,
+  X_pred_third = X_var_pred_third,
   K = ncol(X_var),
   N = nrow(X_var),
   N_pred = nrow(X_var_pred),
@@ -294,6 +312,8 @@ p2 = hist(original_target, breaks = 50)
 hist(exp(replicated_data), breaks = 50)
 hist(exp(original_target), breaks = 100)
 ```
+
+
 ```{r}
 
 loo_lin <- loo(multiple_linear_fit, save_psis = TRUE)
@@ -312,7 +332,7 @@ Using leave one out (LOO), the linear model has 5 pareto k values between 0.7 an
 
 ```{r}
 # Compare LOO elpd values, maybe would work better after the 7
-print(compare(x = list(loo_lin, loo_pol)))
+#print(compare(x = list(loo_lin, loo_pol)))
 #loo_lin <- loo(multiple_linear_fit, save_psis = TRUE)
 #plot(loo_lin, diagnostic = c("k", "n_eff"),
 #  label_points = FALSE, main = "PSIS diagnostic plot for linear model")
@@ -348,6 +368,7 @@ multiple_linear_loo_lin$elpd_loo
 ```{r}
 pareto_k_table(multiple_linear_loo_lin)
 ```
+
 ```{r}
 plot(multiple_linear_loo_lin, diagnostic = c("k", "n_eff"), label_points = FALSE,
   main = "PSIS diagnostic plot for ther multiple linear model")
