@@ -90,7 +90,11 @@ ggpairs(houseprice  %>% select(price, sqft_living, grade, lat, view, waterfront,
 
 ## 3.1 Prior choices
 
-In [3] it is recommended to scale the parameters to unit scale and to use student-t(nu, 0, 1), where 3<nu<7, as a prior for linear regression coefficients.
+In [3] it is recommended to scale the parameters to unit scale and to use student-t distribution $t_\nu(0, 1)$, where $3<\nu<7$, as a prior for linear regression coefficients. Student-t distribution has heavier tails than a normal distribution, but less heavy tails than a cauchy distribution, making it able to predict further away values while still keeping most of the mass near the mean.
+
+$$
+\frac{\Gamma\frac{\nu+1}{2}}{\sqrt{\nu\pi}\Gamma\frac{\nu}{2}}\bigg(1+\frac{x^2}{\nu}\bigg)^{-\frac{\nu+1}{2}}
+$$
 
 [3] https://github.com/stan-dev/stan/wiki/Prior-Choice-Recommendations#prior-for-linear-regression
 
@@ -100,6 +104,11 @@ We have built the model
 
 [4] https://mc-stan.org/users/documentation/case-studies/radon.html
 
+$$
+y_i=\alpha_{j[i]}+\beta x_i+\epsilon_i
+$$
+where $j=1,\dots,70$ denotes the group of the observation. and $\epsilon_i \sim N(0, \sigma)$. The model can also be written as $y_i \sim N(\alpha_{j[i]}+\beta x_i, \sigma)$.
+
 
 ### Grouped multiple linear
 
@@ -107,6 +116,10 @@ We have built the model
 cat(readLines('models/grouped_multiple_linear.stan'), sep='\n')
 ```
 
+
+$$
+y_i=\alpha_{j[i]}+\beta x_i+\gamma x_i^2+\epsilon_i
+$$
 ### Grouped multiple polynomial
 
 ```{r}
