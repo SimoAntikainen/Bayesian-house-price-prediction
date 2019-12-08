@@ -9,6 +9,8 @@ output:
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(dev="png")
+knitr::opts_chunk$set(dpi=200)
 ```
 
 # 1. Introduction
@@ -67,7 +69,7 @@ corrplot(M, method = "circle")
 ```
 
 As the used dataset contains multiple predictors with linear and non-linear depencies, we use lasso regression to perform variable selection on the dataset to find an smaller subset of predictor variables to use in our model. This is neccessary for the purposes of the notebook to speed up the calculations and to better guarantee convergence. 
-!Notice that Lasso regression estimates are calculated suing an linear model so they might not be the best predictiors for an non-linear model. 
+!Notice that Lasso regression estimates are calculated using an linear model so they might not be the best predictors for an non-linear model. 
 
 ```{R}
 houseprice_scaled <- mutate_if(houseprice, is.numeric, list(~scale(.) %>% as.vector))
@@ -78,13 +80,13 @@ ridge_regression <- glmnet(y=data.matrix(response), x=data.matrix(obs), alpha = 
 plot_glmnet(ridge_regression, xvar = "lambda", label = TRUE)
 ```
 
-From the lasso regression plot we can see that: sqft_living, grade, lat, view, waterfront, yr_built, sqft_living15, bathrooms, long, and yr_renovated are the 10 best variables for the model.
+From the lasso regression plot we can see that: sqft_living, grade, lat, view, waterfront, yr_built, sqft_living15, bathrooms and long are the 9 best variables for the model.
 When they are plotted in the matrix plot underneath, we can see that they chosen variables exhibit various linear and nonlinear effects on price.
 We choose all of these variables for the stan model except for the waterfront variable. Waterfront variable is not used as its binary nature causes problems in convergence in the case of polynomial model used.
 
 ```{r,fig.height = 9, fig.width = 9}
 ggpairs(houseprice  %>% select(price, sqft_living, grade, lat, view, waterfront, yr_built, 
-                               sqft_living15, long, bathrooms))
+                               sqft_living15, bathrooms, long))
 ```
 
 
@@ -142,10 +144,8 @@ usable_numeric_columns = c("sqft_living", "grade","view", "lat", "yr_built",
 
 
 ```{r}
-#training_indices = 0:16000
-#testing_indices = 16001:20000
-training_indices = 0:1000
-testing_indices = 1001:1200
+training_indices = 0:16000
+testing_indices = 16001:20000
 
 used_columns = usable_numeric_columns
 target_column = c("log_price")
@@ -322,7 +322,9 @@ replicated_data_pol = denormalize_results(extract(multiple_polynomial_fit)$y_rep
 plot(density(replicated_data_lin), col="red", main="Replicated posterior" )
 lines(density(replicated_data_pol), col="blue")
 lines(density(original_target), col="black")
-legend(x="topright", legend=c("Linear replicated", "Polynomial Replicated", "Original data"),col=c("red", "blue", "black"), lty=1:1, cex=0.8)
+legend(x="topright",
+       legend=c("Linear replicated", "Polynomial Replicated", "Original data"),
+       col=c("red", "blue", "black"), lty=1:1, cex=0.8)
 ```
 
 
@@ -334,7 +336,8 @@ lw_lin <- weights(psis_lin)
 pp_check(c(original_target[training_indices]), yrep = replicated_data_lin, fun = "stat")
 ppc_loo_pit_overlay(c(original_target[training_indices]), yrep = replicated_data_lin,
                     lw = lw_lin)
-ppc_loo_ribbon(c(original_target[training_indices][original_training_order]), yrep = replicated_data_lin[,original_training_order],
+ppc_loo_ribbon(c(original_target[training_indices][original_training_order]),
+               yrep = replicated_data_lin[,original_training_order],
                lw = lw_lin, psis_object = psis_lin)
 ppc_loo_intervals(c(original_target[training_indices]),
                   yrep = replicated_data_lin, psis_object = psis_lin)
@@ -348,7 +351,8 @@ lw_pol <- weights(psis_pol)
 pp_check(c(original_target[training_indices]), yrep = replicated_data_pol, fun = "stat")
 ppc_loo_pit_overlay(c(original_target[training_indices]), yrep = replicated_data_pol,
                     lw = lw_pol)
-ppc_loo_ribbon(c(original_target[training_indices][original_training_order]), yrep = replicated_data_pol[,original_training_order],
+ppc_loo_ribbon(c(original_target[training_indices][original_training_order]),
+               yrep = replicated_data_pol[,original_training_order],
                lw = lw_pol, psis_object = psis_pol)
 ppc_loo_intervals(c(original_target[training_indices]),
                   yrep = replicated_data_pol, psis_object = psis_pol)
@@ -420,9 +424,6 @@ plot(multiple_polynomial_loo_lin, diagnostic = c("k", "n_eff"), label_points = F
 ## p_eff values
 
 ```{R}
-#print(multiple_linear_loo_lin$p_loo)
-#print(multiple_polynomial_loo_lin$p_loo)
-#loo_compare(waic(multiple_linear_log_lik), waic(multiple_polynomial_log_lik))
 loo_compare(x = list(multiple_linear_loo_lin, multiple_polynomial_loo_lin))
 ```
 
