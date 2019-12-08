@@ -135,7 +135,7 @@ cat(readLines('models/grouped_multiple_polynomial.stan'), sep='\n')
 
 ## 3.3 Running the models
 
-We train the models on 80% of the data and test the prediction accuracy on 20% of the dataset
+We train the models on 80%/20%-test split using 5000 first datapoints. Using all datapoints is possible, but R-will run out of memory while plotting.
 
 ```{r}
 usable_numeric_columns = c("sqft_living", "grade","view", "lat", "yr_built", 
@@ -144,8 +144,8 @@ usable_numeric_columns = c("sqft_living", "grade","view", "lat", "yr_built",
 
 
 ```{r}
-training_indices = 0:16000
-testing_indices = 16001:20000
+training_indices = 0:4000
+testing_indices = 4001:5000
 
 used_columns = usable_numeric_columns
 target_column = c("log_price")
@@ -370,7 +370,7 @@ data.frame(linear = mae_lin, polynomial = mae_pol)
 
 ## PSIS-lOO 
 
-Obtained elpd information criteria values of the two models are largely the same with the polynomial model having an larger value, suggesting it is better of the two models. The k-values of the models are small suggesting the models fit the data well§.
+Obtained elpd information criteria values of the two models are largely the same with the polynomial model having an larger value, suggesting it is better of the two models. The k-values of the models are small suggesting the models fit the data well. 
 
 ### Multiple linear regression
 
