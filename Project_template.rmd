@@ -39,7 +39,6 @@ set.seed(42)
 # 2. Dataset description
 
 For the prediction task we have chosen House Sales in King County, USA dataset [2], which provides data for the houses sold between May 2014 / May 2015 in the area in an regression friendly form.   
-
 [2] https://www.kaggle.com/harlfoxem/housesalesprediction
 
 ```{r}
@@ -118,21 +117,17 @@ cat(readLines('models/grouped_multiple_polynomial.stan'), sep='\n')
 
 ## 3.3 Running the models
 
-(amount of chains etc and the final fit)
-
+We train the models on 80% of the data and test the prediction accuarucy on 20% of the dataset
 
 ```{r}
-#usable_numeric_columns = c("date_num", "lat", "long", "yr_built", "sqft_basement", "sqft_above", "grade", "condition", "view", "waterfront", #"floors", "sqft_lot", "sqft_living", "bathrooms", "bedrooms")
-#usable_numeric_columns = c("sqft_living", "grade","lat")
-#usable_numeric_columns = c("sqft_living", "grade", "lat", "view", "waterfront", "yr_built")
+#usable_numeric_columns = c("date_num", "lat", "long", "yr_built", "sqft_basement", "sqft_above", "grade", "condition", "view", "waterfront", #"floors", "sqft_lot", 
 usable_numeric_columns = c("sqft_living", "grade","view", "lat", "yr_built", "sqft_living15","long", "bathrooms")
-
 ```
 
 
 ```{r}
-training_indices = 0:4000
-testing_indices = 4001:5000
+training_indices = 0:16000
+testing_indices = 16001:20000
 
 used_columns = usable_numeric_columns
 target_column = c("log_price")
@@ -275,7 +270,7 @@ mae_pol
 ## Grouped multiple linear
 
 ```{r}
-print(multiple_linear_fit)
+print(multiple_linear_fit, pars = c("alpha", "beta"))
 ```
 
 ```{R}
@@ -287,7 +282,7 @@ mcmc_trace(multiple_linear_fit, regex_pars = "beta")
 
 
 ```{r}
-print(multiple_polynomial_fit)
+print(multiple_polynomial_fit,  pars = c("alpha", "beta", "beta_second"))
 ```
 
 
