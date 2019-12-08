@@ -18,7 +18,7 @@ Online services such as zillow zestimates [1] provide accuarate information on h
 [1] https://www.zillow.com/zestimate/
 
 
-```{r}
+```{r,message=FALSE, warning=FALSE}
 library(rstan)
 options(mc.cores = 4)#parallel::detectCores())
 library(ggplot2)
@@ -33,6 +33,7 @@ library(plotmo)
 library(Metrics)
 library(bayesplot)
 library(loo)
+set.seed(42)
 ```
 
 # 2. Dataset description
@@ -64,6 +65,7 @@ corrplot(M, method = "circle")
 ```
 
 As the used dataset contains multiple predictors with linear and non-linear depencies, we use lasso regression to perform variable selection on the dataset to find an smaller subset of predictor variables to use in our model. This is neccessary for the purposes of the notebook to speed up the calculations and to better guarantee convergence. 
+!Notice that Lasso regression estimates are calculated suing an linear model so they might not be the best predictiors for an non-linear model. 
 
 ```{R}
 houseprice_scaled <- mutate_if(houseprice, is.numeric, list(~scale(.) %>% as.vector))
@@ -74,12 +76,12 @@ ridge_regression <- glmnet(y=data.matrix(response), x=data.matrix(obs), alpha = 
 plot_glmnet(ridge_regression, xvar = "lambda", label = TRUE)
 ```
 
-From the lasso regression plot we can see that: sqft_living, grade, lat, view, waterfront and yr_built are the 6 best variables for the model.
+From the lasso regression plot we can see that: sqft_living, grade, lat, view, waterfront, yr_built, sqft_living15, bathrooms, long, and yr_renovated are the 10 best variables for the model.
 When they are plotted in the matrix plot underneath, we can see that they chosen variables exhibit various linear and nonlinear effects on price.
 We choose all of these variables for the stan model except for the waterfront variable. Waterfront variable is not used as its binary nature causes problems in convergence in the case of polynomial model used.
 
-```{r}
-ggpairs(houseprice  %>% select(price, sqft_living, grade, lat, view, waterfront, yr_built))
+```{r,fig.height = 9, fig.width = 9}
+ggpairs(houseprice  %>% select(price, sqft_living, grade, lat, view, waterfront, yr_built, sqft_living15, long, bathrooms))
 ```
 
 
@@ -109,7 +111,7 @@ cat(readLines('models/grouped_multiple_linear.stan'), sep='\n')
 
 ```{r}
 
-cat(readLines('models/grouped_multiple_polynomial_3.stan'), sep='\n')
+cat(readLines('models/grouped_multiple_polynomial.stan'), sep='\n')
 ```
 
 
@@ -123,14 +125,14 @@ cat(readLines('models/grouped_multiple_polynomial_3.stan'), sep='\n')
 #usable_numeric_columns = c("date_num", "lat", "long", "yr_built", "sqft_basement", "sqft_above", "grade", "condition", "view", "waterfront", #"floors", "sqft_lot", "sqft_living", "bathrooms", "bedrooms")
 #usable_numeric_columns = c("sqft_living", "grade","lat")
 #usable_numeric_columns = c("sqft_living", "grade", "lat", "view", "waterfront", "yr_built")
-usable_numeric_columns = c("sqft_living", "grade","view", "lat", "yr_built")
+usable_numeric_columns = c("sqft_living", "grade","view", "lat", "yr_built", "sqft_living15","long", "bathrooms")
 
 ```
 
 
 ```{r}
-training_indices = 0:1000
-testing_indices = 1001:2000
+training_indices = 0:4000
+testing_indices = 4001:5000
 
 used_columns = usable_numeric_columns
 target_column = c("log_price")
