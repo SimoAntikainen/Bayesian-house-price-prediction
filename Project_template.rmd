@@ -269,7 +269,7 @@ mae_pol
 
 # 4. Convergence diagnostics
 
-
+From the plots of the models we can see that all model parameters have converged.
 
 ## Grouped multiple linear
 
@@ -330,29 +330,18 @@ ppc_loo_intervals(c(original_target[training_indices]),
 ```
 
 
-# 6. Model comparison
+# 6. Predictive performance assesment
 
-Using leave one out (LOO), the linear model has 5 pareto k values between 0.7 and 1, and 11 values between 0.5 and 0.7. The loo values can therefore be slightly biased
-
-```{r}
-# Compare LOO elpd values, maybe would work better after the 7
-#print(compare(x = list(loo_lin, loo_pol)))
-#loo_lin <- loo(multiple_linear_fit, save_psis = TRUE)
-#plot(loo_lin, diagnostic = c("k", "n_eff"),
-#  label_points = FALSE, main = "PSIS diagnostic plot for linear model")
-#print(loo_lin)
-```
-
+From the mean squared errors we can see that the polynomial model performed better on the test set 
 ```{r}
 # compare errors
 data.frame(linear = mae_lin, polynomial = mae_pol)
 ```
 
-# 7. Predictive performance assesment
 
-assignment 8 
+## PSIS-lOO 
 
-## PSIS_LOO and k-values
+Obtained elpd information criteria values of the two models are largely the same with the polynomial model having an larger value, suggesting it is better of the two models. The k-values of the models are small suggesting the models fit the data well§.
 
 ### Multiple linear regression
 
@@ -410,7 +399,7 @@ print(multiple_linear_loo_lin$p_loo)
 print(multiple_polynomial_loo_lin$p_loo)
 ```
 
-# 9. Discussion
+# 7. Discussion
 
 
 Wrt using separate beta for each group:
