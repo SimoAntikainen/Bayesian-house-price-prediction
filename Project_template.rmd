@@ -336,14 +336,14 @@ lines(density(original_target))
 
 
 ```{r}
-
+original_training_order = order(original_target[training_indices])
 loo_lin <- loo(multiple_linear_fit, save_psis = TRUE)
 psis_lin <- loo_lin$psis_object
 lw_lin <- weights(psis_lin)
 pp_check(c(original_target[training_indices]), yrep = replicated_data_lin, fun = "stat")
 ppc_loo_pit_overlay(c(original_target[training_indices]), yrep = replicated_data_lin,
                     lw = lw_lin)
-ppc_loo_ribbon(c(original_target[training_indices]), yrep = replicated_data_lin,
+ppc_loo_ribbon(c(original_target[training_indices][original_training_order]), yrep = replicated_data_lin[,original_training_order],
                lw = lw_lin, psis_object = psis_lin)
 ppc_loo_intervals(c(original_target[training_indices]),
                   yrep = replicated_data_lin, psis_object = psis_lin)
@@ -356,11 +356,11 @@ psis_pol <- loo_pol$psis_object
 lw_pol <- weights(psis_pol)
 pp_check(c(original_target[training_indices]), yrep = replicated_data_pol, fun = "stat")
 ppc_loo_pit_overlay(c(original_target[training_indices]), yrep = replicated_data_pol,
-                    lw = lw_lin)
-ppc_loo_ribbon(c(original_target[training_indices]), yrep = replicated_data_pol,
-               lw = lw_lin, psis_object = psis_lin)
+                    lw = lw_pol)
+ppc_loo_ribbon(c(original_target[training_indices][original_training_order]), yrep = replicated_data_pol[,original_training_order],
+               lw = lw_pol, psis_object = psis_pol)
 ppc_loo_intervals(c(original_target[training_indices]),
-                  yrep = replicated_data_pol, psis_object = psis_lin)
+                  yrep = replicated_data_pol, psis_object = psis_pol)
 ```
 
 
@@ -440,6 +440,20 @@ Wrt using separate beta for each group:
 There are 70 groups, so using a different beta value for each parameter for each group would increase the number of parameters of the model by 2-17 times, likely slowing the model. In addition, the number of data usable for each beta value would shrink. The dataset is large, so using most of the dataset for training, it shouldn't be a problem but with less data it could lead to overfitting. Practically it would mean that there is no relation between the effects of the parameters between different groups, e.g. the size of the building could increase price somewhere and decrease it elsewhere, which sounds counterintuitive, but could still be an avenue for future research.
 
 some conclusion
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
