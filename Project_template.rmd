@@ -50,7 +50,10 @@ houseprice = houseprice[sample(nrow(houseprice)),]
 #drop colinear columns sqft_living = sqft_above + sqft_basement
 houseprice = subset(houseprice, select = -c(sqft_above, sqft_basement))
 
+#transform the depended variable to log scale to  ensure better numerical accuracy
 houseprice$log_price = log(houseprice$price)
+
+
 datecol <- as.POSIXct(houseprice$date, format="%Y%m%dT%H%M%S")
 houseprice$date_num = as.numeric(datecol)
 unique_zips = unique(houseprice$zipcode)
@@ -100,27 +103,27 @@ $$
 
 ## 3.2 Stan models
 
-We have built the model
+We have built the models using stan radon case study [4] as a starting point to build our regression models. We have expanded on the varying intercept model of the example by adding multiple linear and polynomial terms into the model. In our model intercept parameters vary by the zipcode while the slope parameters are shared across are zipcodes.
 
 [4] https://mc-stan.org/users/documentation/case-studies/radon.html
+
+
+### Grouped multiple linear
 
 $$
 y_i=\alpha_{j[i]}+\beta x_i+\epsilon_i
 $$
 where $j=1,\dots,70$ denotes the group of the observation. and $\epsilon_i \sim N(0, \sigma)$. The model can also be written as $y_i \sim N(\alpha_{j[i]}+\beta x_i, \sigma)$.
 
-
-### Grouped multiple linear
-
 ```{r}
 cat(readLines('models/grouped_multiple_linear.stan'), sep='\n')
 ```
 
+### Grouped multiple polynomial
 
 $$
 y_i=\alpha_{j[i]}+\beta x_i+\gamma x_i^2+\epsilon_i
 $$
-### Grouped multiple polynomial
 
 ```{r}
 cat(readLines('models/grouped_multiple_polynomial.stan'), sep='\n')
@@ -202,7 +205,6 @@ predicted_prices = denormalize_results(predicted_raws, orig_sd, orig_mean)
 ```{r}
 result_testing = data.frame(price = testing_target, predicted = predicted_prices)
 ggpairs(result_testing, columns = c("price", "predicted.50."))
-#, #ggplot2::aes(colour=factor(as.integer(lat*20)), alpha=0.75)) 
 ```
 
 
@@ -272,7 +274,6 @@ predicted_prices = denormalize_results(predicted_raws, orig_sd, orig_mean)
 ```{r}
 result_testing = data.frame(price = testing_target, predicted = predicted_prices)
 ggpairs(result_testing, columns = c("price", "predicted.50."))
-#, #ggplot2::aes(colour=factor(as.integer(lat*20)), alpha=0.75)) 
 ```
 
 
@@ -306,15 +307,8 @@ print(multiple_polynomial_fit,  pars = c("alpha", "beta", "beta_second"))
 
 
 ```{R}
-#posterior_divergences <- as.array(multiple_polynomial_fit)
-#np = nuts_params(posterior_divergences)
 mcmc_trace(multiple_polynomial_fit, regex_pars = "beta")
 ```
-
-
-
-
-
 
 
 # 5. Posterior predictive checking
@@ -324,19 +318,11 @@ We can see that replicated data is indistinguishable from the target
 ```{r}
 replicated_data_lin = denormalize_results(extract(multiple_linear_fit)$y_rep, orig_sd, orig_mean)
 replicated_data_pol = denormalize_results(extract(multiple_polynomial_fit)$y_rep, orig_sd, orig_mean)
-#ppc_data = data.frame(original=original_target, linear=replicated_data_lin, polynomial=replicated_data_pol)
 
 plot(density(replicated_data_lin), col="red", main="Replicated posterior" )
 lines(density(replicated_data_pol), col="blue")
 lines(density(original_target), col="black")
 legend(x="topright", legend=c("Linear replicated", "Polynomial Replicated", "Original data"),col=c("red", "blue", "black"), lty=1:1, cex=0.8)
-#ggplot(ppc_data) +
-#  geom_density()
-#p1 = hist(replicated_data_pol, breaks = 50, )
-#p2 = hist(original_target, breaks = 50)
-
-#hist(exp(replicated_data), breaks = 50)
-#hist(exp(original_target), breaks = 100)
 ```
 
 
@@ -447,28 +433,4 @@ Wrt using separate beta for each group:
 There are 70 groups, so using a different beta value for each parameter for each group would increase the number of parameters of the model by 2-17 times, likely slowing the model. In addition, the number of data usable for each beta value would shrink. The dataset is large, so using most of the dataset for training, it shouldn't be a problem but with less data it could lead to overfitting. Practically it would mean that there is no relation between the effects of the parameters between different groups, e.g. the size of the building could increase price somewhere and decrease it elsewhere, which sounds counterintuitive, but could still be an avenue for future research.
 
 In this report we have explored linear and polynomial regression models for predicting house prices. The differences between the results from the models are small, but the polynomial model performs a bit better. The mean absolute error for both models is over hundred thousand, but considering the mean of the prices is around five hundred thousand, some error is to be expected. Overall the results follow the true data.
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
