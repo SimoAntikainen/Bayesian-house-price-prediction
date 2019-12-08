@@ -93,7 +93,7 @@ ggpairs(houseprice  %>% select(price, sqft_living, grade, lat, view, waterfront,
 In [3] it is recommended to scale the parameters to unit scale and to use student-t distribution $t_\nu(0, 1)$, where $3<\nu<7$, as a prior for linear regression coefficients. Student-t distribution has heavier tails than a normal distribution, but less heavy tails than a cauchy distribution, making it able to predict further away values while still keeping most of the mass near the mean.
 
 $$
-\frac{\Gamma\frac{\nu+1}{2}}{\sqrt{\nu\pi}\Gamma\frac{\nu}{2}}\bigg(1+\frac{x^2}{\nu}\bigg)^{-\frac{\nu+1}{2}}
+t_{\nu_{pdf}} = \frac{\Gamma\frac{\nu+1}{2}}{\sqrt{\nu\pi}\Gamma\frac{\nu}{2}}\bigg(1+\frac{x^2}{\nu}\bigg)^{-\frac{\nu+1}{2}}
 $$
 
 [3] https://github.com/stan-dev/stan/wiki/Prior-Choice-Recommendations#prior-for-linear-regression
@@ -130,7 +130,7 @@ cat(readLines('models/grouped_multiple_polynomial.stan'), sep='\n')
 
 ## 3.3 Running the models
 
-We train the models on 80% of the data and test the prediction accuarucy on 20% of the dataset
+We train the models on 80% of the data and test the prediction accuracy on 20% of the dataset
 
 ```{r}
 usable_numeric_columns = c("sqft_living", "grade","view", "lat", "yr_built", 
@@ -318,13 +318,15 @@ mcmc_trace(multiple_polynomial_fit, regex_pars = "beta")
 # 5. Posterior predictive checking
 
 ```{r}
-replicated_data = denormalize_results(extract(multiple_linear_fit)$y_rep, orig_sd, orig_mean)
-#launch_shinystan(multiple_linear_fit)
-p1 = hist(replicated_data, breaks = 50)
+replicated_data_lin = denormalize_results(extract(multiple_linear_fit)$y_rep, orig_sd, orig_mean)
+replicated_data_pol = denormalize_results(extract(multiple_polynomial_fit)$y_rep, orig_sd, orig_mean)
+
+p1 = hist(replicated_data_lin, breaks = 50)
+p1 = hist(replicated_data_pol, breaks = 50)
 p2 = hist(original_target, breaks = 50)
 
-hist(exp(replicated_data), breaks = 50)
-hist(exp(original_target), breaks = 100)
+#hist(exp(replicated_data), breaks = 50)
+#hist(exp(original_target), breaks = 100)
 ```
 
 
@@ -333,19 +335,33 @@ hist(exp(original_target), breaks = 100)
 loo_lin <- loo(multiple_linear_fit, save_psis = TRUE)
 psis_lin <- loo_lin$psis_object
 lw_lin <- weights(psis_lin)
-pp_check(c(original_target[training_indices]), yrep = replicated_data, fun = "stat")
-ppc_loo_pit_overlay(c(original_target[training_indices]), yrep = replicated_data,
+pp_check(c(original_target[training_indices]), yrep = replicated_data_lin, fun = "stat")
+ppc_loo_pit_overlay(c(original_target[training_indices]), yrep = replicated_data_lin,
                     lw = lw_lin)
-ppc_loo_ribbon(c(original_target[training_indices]), yrep = replicated_data,
+ppc_loo_ribbon(c(original_target[training_indices]), yrep = replicated_data_lin,
                lw = lw_lin, psis_object = psis_lin)
 ppc_loo_intervals(c(original_target[training_indices]),
-                  yrep = replicated_data, psis_object = psis_lin)
+                  yrep = replicated_data_lin, psis_object = psis_lin)
+```
+
+```{r}
+
+loo_pol <- loo(multiple_polynomial_fit, save_psis = TRUE)
+psis_pol <- loo_pol$psis_object
+lw_pol <- weights(psis_pol)
+pp_check(c(original_target[training_indices]), yrep = replicated_data_pol, fun = "stat")
+ppc_loo_pit_overlay(c(original_target[training_indices]), yrep = replicated_data_pol,
+                    lw = lw_lin)
+ppc_loo_ribbon(c(original_target[training_indices]), yrep = replicated_data_pol,
+               lw = lw_lin, psis_object = psis_lin)
+ppc_loo_intervals(c(original_target[training_indices]),
+                  yrep = replicated_data_pol, psis_object = psis_lin)
 ```
 
 
 # 6. Model comparison
 
-Using leave one out (LOO), the linear model has 5 pareto k values between 0.7 and 1, and 11 values between 0.5 and 0.7. The loo values can therefore be slightly biased
+Using leave one out (LOO), the models have no pareto-k values over 0.7, showing that the estimates are reliable.
 
 ```{r}
 # Compare LOO elpd values, maybe would work better after the 7
@@ -427,7 +443,7 @@ print(multiple_polynomial_loo_lin$p_loo)
 
 
 Wrt using separate beta for each group:
-There are 70 groups, so using a different beta value for each parameter for each group would increase the number of parameters of the model by 2-17 times, likely slowing the model. In addition, the number of data usable for each beta value would shrink. The dataset is large, so using most of the dataset for training, it shouldn't be a problem but with less data it could lead to overfitting. Practically it would mean that there is no relation between the effects of the parameters between different groups, e.g. the size of the building could increase price somewhere and decrease it elsewhere.
+There are 70 groups, so using a different beta value for each parameter for each group would increase the number of parameters of the model by 2-17 times, likely slowing the model. In addition, the number of data usable for each beta value would shrink. The dataset is large, so using most of the dataset for training, it shouldn't be a problem but with less data it could lead to overfitting. Practically it would mean that there is no relation between the effects of the parameters between different groups, e.g. the size of the building could increase price somewhere and decrease it elsewhere, which sounds counterintuitive, but could still be an avenue for future research.
 
 some conclusion
 
