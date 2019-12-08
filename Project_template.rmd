@@ -80,7 +80,8 @@ When they are plotted in the matrix plot underneath, we can see that they chosen
 We choose all of these variables for the stan model except for the waterfront variable. Waterfront variable is not used as its binary nature causes problems in convergence in the case of polynomial model used.
 
 ```{r,fig.height = 9, fig.width = 9}
-ggpairs(houseprice  %>% select(price, sqft_living, grade, lat, view, waterfront, yr_built, sqft_living15, long, bathrooms))
+ggpairs(houseprice  %>% select(price, sqft_living, grade, lat, view, waterfront, yr_built, 
+                               sqft_living15, long, bathrooms))
 ```
 
 
@@ -109,7 +110,6 @@ cat(readLines('models/grouped_multiple_linear.stan'), sep='\n')
 ### Grouped multiple polynomial
 
 ```{r}
-
 cat(readLines('models/grouped_multiple_polynomial.stan'), sep='\n')
 ```
 
@@ -120,8 +120,8 @@ cat(readLines('models/grouped_multiple_polynomial.stan'), sep='\n')
 We train the models on 80% of the data and test the prediction accuarucy on 20% of the dataset
 
 ```{r}
-#usable_numeric_columns = c("date_num", "lat", "long", "yr_built", "sqft_basement", "sqft_above", "grade", "condition", "view", "waterfront", #"floors", "sqft_lot", 
-usable_numeric_columns = c("sqft_living", "grade","view", "lat", "yr_built", "sqft_living15","long", "bathrooms")
+usable_numeric_columns = c("sqft_living", "grade","view", "lat", "yr_built", 
+                           "sqft_living15","long", "bathrooms")
 ```
 
 
@@ -186,7 +186,8 @@ predicted_prices = denormalize_results(predicted_raws, orig_sd, orig_mean)
 
 ```{r}
 result_testing = data.frame(price = testing_target, predicted = predicted_prices)
-ggpairs(result_testing, columns = c("price", "predicted.50."))#, #ggplot2::aes(colour=factor(as.integer(lat*20)), alpha=0.75)) 
+ggpairs(result_testing, columns = c("price", "predicted.50."))
+#, #ggplot2::aes(colour=factor(as.integer(lat*20)), alpha=0.75)) 
 ```
 
 
@@ -201,7 +202,8 @@ mae_lin
 violin_predicted = extract(multiple_linear_fit)$y_pred
 violin_predicted = exp(denormalize_results(violin_predicted, orig_sd, orig_mean))
 #violin_predicted = exp(predicted_prices)
-violin_groups = outer(1:nrow(violin_predicted), 1:ncol(violin_predicted), FUN=function(r,c) unique_zips[group_var_pred[c]] )
+violin_groups = outer(1:nrow(violin_predicted), 1:ncol(violin_predicted),
+                      FUN=function(r,c) unique_zips[group_var_pred[c]] )
 violin_predicted = c(t(violin_predicted))
 violin_groups = as.factor(c(t(violin_groups)))
 violin_data_list_thing = data.frame(price=violin_predicted, group=violin_groups)
@@ -217,7 +219,7 @@ p
 X_var_second = X_var^2
 X_var_pred_second = X_var_pred^2
 
-#not used 
+#not used (third degree polynomial model data)
 X_var_third = X_var^3
 X_var_pred_third = X_var_pred^3
 
@@ -241,7 +243,8 @@ data_list = list(
 
 
 ```{r}
-multiple_polynomial_fit <- stan(file = 'models/grouped_multiple_polynomial.stan', data = data_list)
+multiple_polynomial_fit <- stan(file = 'models/grouped_multiple_polynomial.stan',
+                                data = data_list)
 ```
 
 ```{r}
@@ -253,7 +256,8 @@ predicted_prices = denormalize_results(predicted_raws, orig_sd, orig_mean)
 
 ```{r}
 result_testing = data.frame(price = testing_target, predicted = predicted_prices)
-ggpairs(result_testing, columns = c("price", "predicted.50."))#, #ggplot2::aes(colour=factor(as.integer(lat*20)), alpha=0.75)) 
+ggpairs(result_testing, columns = c("price", "predicted.50."))
+#, #ggplot2::aes(colour=factor(as.integer(lat*20)), alpha=0.75)) 
 ```
 
 
@@ -317,9 +321,12 @@ loo_lin <- loo(multiple_linear_fit, save_psis = TRUE)
 psis_lin <- loo_lin$psis_object
 lw_lin <- weights(psis_lin)
 pp_check(c(original_target[training_indices]), yrep = replicated_data, fun = "stat")
-ppc_loo_pit_overlay(c(original_target[training_indices]), yrep = replicated_data, lw = lw_lin)
-ppc_loo_ribbon(c(original_target[training_indices]), yrep = replicated_data, lw = lw_lin, psis_object = psis_lin)
-ppc_loo_intervals(c(original_target[training_indices]), yrep = replicated_data, psis_object = psis_lin)
+ppc_loo_pit_overlay(c(original_target[training_indices]), yrep = replicated_data,
+                    lw = lw_lin)
+ppc_loo_ribbon(c(original_target[training_indices]), yrep = replicated_data,
+               lw = lw_lin, psis_object = psis_lin)
+ppc_loo_intervals(c(original_target[training_indices]),
+                  yrep = replicated_data, psis_object = psis_lin)
 ```
 
 
@@ -402,10 +409,6 @@ plot(multiple_polynomial_loo_lin, diagnostic = c("k", "n_eff"), label_points = F
 print(multiple_linear_loo_lin$p_loo)
 print(multiple_polynomial_loo_lin$p_loo)
 ```
-
-# 8. Sensitivity analysis
-
-
 
 # 9. Discussion
 
