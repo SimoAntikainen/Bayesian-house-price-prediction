@@ -1,5 +1,5 @@
 ---
-title: "Housing price prediction"
+title: "House selling price prediction"
 author: "Anonymous"
 output: 
   pdf_document: 
@@ -139,8 +139,10 @@ usable_numeric_columns = c("sqft_living", "grade","view", "lat", "yr_built",
 
 
 ```{r}
-training_indices = 0:16000
-testing_indices = 16001:20000
+#training_indices = 0:16000
+#testing_indices = 16001:20000
+training_indices = 0:1000
+testing_indices = 1001:1200
 
 used_columns = usable_numeric_columns
 target_column = c("log_price")
@@ -317,14 +319,17 @@ mcmc_trace(multiple_polynomial_fit, regex_pars = "beta")
 
 # 5. Posterior predictive checking
 
+We can see that replicated data is indistinguishable from the target
+
 ```{r}
 replicated_data_lin = denormalize_results(extract(multiple_linear_fit)$y_rep, orig_sd, orig_mean)
 replicated_data_pol = denormalize_results(extract(multiple_polynomial_fit)$y_rep, orig_sd, orig_mean)
 #ppc_data = data.frame(original=original_target, linear=replicated_data_lin, polynomial=replicated_data_pol)
 
-plot(density(replicated_data_lin), col="red")
+plot(density(replicated_data_lin), col="red", main="Replicated posterior" )
 lines(density(replicated_data_pol), col="blue")
-lines(density(original_target))
+lines(density(original_target), col="black")
+legend(x="topright", legend=c("Linear replicated", "Polynomial Replicated", "Original data"),col=c("red", "blue", "black"), lty=1:1, cex=0.8)
 #ggplot(ppc_data) +
 #  geom_density()
 #p1 = hist(replicated_data_pol, breaks = 50, )
