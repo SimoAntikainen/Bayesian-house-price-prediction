@@ -92,6 +92,7 @@ ggpairs(houseprice  %>% select(price, sqft_living, grade, lat, view, waterfront,
 
 # 3. Model description
 
+We fit two varying intercept regression models: an multiple linear and an multiple polynomial model. Varying intercept models are multilevel models, which make use of partial pooling 
 
 ## 3.1 Prior choices
 
@@ -105,7 +106,7 @@ $$
 
 ## 3.2 Stan models
 
-We have built the models using stan radon case study [4] as a starting point to build our regression models. We have expanded on the varying intercept model of the example by adding multiple linear and polynomial terms into the model. In our model intercept parameters vary by the zipcode while the slope parameters are shared across are zipcodes.
+We have built the models using stan radon case study [4] as a starting point to build our regression models. We have expanded on the varying intercept model of the example by adding multiple linear and polynomial terms into the model. In our model intercept parameters vary by the zipcode while the slope parameters are shared across zipcodes.
 
 [4] https://mc-stan.org/users/documentation/case-studies/radon.html
 
@@ -135,7 +136,7 @@ cat(readLines('models/grouped_multiple_polynomial.stan'), sep='\n')
 
 ## 3.3 Running the models
 
-We train the models on 80%/20%-test split using 5000 first datapoints. Using all datapoints is possible, but R-will run out of memory while plotting.
+We train the models on 80%/20%-test split using 10000 first datapoints. Using all datapoints is possible, but R-will run out of memory while plotting.
 
 ```{r}
 usable_numeric_columns = c("sqft_living", "grade","view", "lat", "yr_built", 
@@ -144,8 +145,8 @@ usable_numeric_columns = c("sqft_living", "grade","view", "lat", "yr_built",
 
 
 ```{r}
-training_indices = 0:4000
-testing_indices = 4001:5000
+training_indices = 0:8000
+testing_indices = 8001:10000
 
 used_columns = usable_numeric_columns
 target_column = c("log_price")
@@ -298,6 +299,11 @@ posterior_divergences <- as.array(multiple_linear_fit)
 mcmc_trace(multiple_linear_fit, regex_pars = "beta")
 ```
 
+```{r}
+#past tree depth
+get_num_max_treedepth(multiple_linear_fit)
+```
+
 ## Grouped multiple polynomial
 
 
@@ -310,6 +316,10 @@ print(multiple_polynomial_fit,  pars = c("alpha", "beta", "beta_second"))
 mcmc_trace(multiple_polynomial_fit, regex_pars = "beta")
 ```
 
+```{R}
+#past tree depth
+get_num_max_treedepth(multiple_polynomial_fit)
+```
 
 # 5. Posterior predictive checking
 
