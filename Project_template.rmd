@@ -379,7 +379,7 @@ r_eff <- relative_eff(exp(multiple_linear_log_lik))
 multiple_linear_loo_lin <- loo(multiple_linear_log_lik, r_eff = r_eff)
 
 #elpd loo
-multiple_linear_loo_lin$elpd_loo
+multiple_linear_loo_lin
 ```
 
 
@@ -405,7 +405,7 @@ r_eff <- relative_eff(exp(multiple_polynomial_log_lik))
 multiple_polynomial_loo_lin <- loo(multiple_polynomial_log_lik, r_eff = r_eff)
 
 #elpd loo
-multiple_polynomial_loo_lin$elpd_loo
+multiple_polynomial_loo_lin
 ```
 
 ```{r}
@@ -420,8 +420,10 @@ plot(multiple_polynomial_loo_lin, diagnostic = c("k", "n_eff"), label_points = F
 ## p_eff values
 
 ```{R}
-print(multiple_linear_loo_lin$p_loo)
-print(multiple_polynomial_loo_lin$p_loo)
+#print(multiple_linear_loo_lin$p_loo)
+#print(multiple_polynomial_loo_lin$p_loo)
+#loo_compare(waic(multiple_linear_log_lik), waic(multiple_polynomial_log_lik))
+loo_compare(x = list(multiple_linear_loo_lin, multiple_polynomial_loo_lin))
 ```
 
 # 7. Discussion
@@ -429,26 +431,4 @@ print(multiple_polynomial_loo_lin$p_loo)
 
 Wrt using separate beta for each group:
 There are 70 groups, so using a different beta value for each parameter for each group would increase the number of parameters of the model by 2-17 times, likely slowing the model. In addition, the number of data usable for each beta value would shrink. The dataset is large, so using most of the dataset for training, it shouldn't be a problem but with less data it could lead to overfitting. Practically it would mean that there is no relation between the effects of the parameters between different groups, e.g. the size of the building could increase price somewhere and decrease it elsewhere, which sounds counterintuitive, but could still be an avenue for future research.
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
