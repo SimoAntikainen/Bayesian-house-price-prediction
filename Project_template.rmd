@@ -428,9 +428,10 @@ loo_compare(x = list(multiple_linear_loo_lin, multiple_polynomial_loo_lin))
 
 # 7. Discussion
 
+In this report we have explored linear and polynomial regression models for predicting house prices. The differences between the results from the models are small, but the polynomial model performs a bit better. The mean absolute error for both models is over hundred thousand, but considering the mean of the prices is around five hundred thousand, some error is to be expected. Overall the results follow the true data.
 
-Wrt using separate beta for each group:
+In the future we could consider varying slope parameter by zipcode, but this has few obvious drawbacks.
 There are 70 groups, so using a different beta value for each parameter for each group would increase the number of parameters of the model by 2-17 times, likely slowing the model. In addition, the number of data usable for each beta value would shrink. The dataset is large, so using most of the dataset for training, it shouldn't be a problem but with less data it could lead to overfitting. Practically it would mean that there is no relation between the effects of the parameters between different groups, e.g. the size of the building could increase price somewhere and decrease it elsewhere, which sounds counterintuitive, but could still be an avenue for future research.
 
-In this report we have explored linear and polynomial regression models for predicting house prices. The differences between the results from the models are small, but the polynomial model performs a bit better. The mean absolute error for both models is over hundred thousand, but considering the mean of the prices is around five hundred thousand, some error is to be expected. Overall the results follow the true data.
+
 
