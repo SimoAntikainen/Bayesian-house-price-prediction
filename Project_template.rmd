@@ -320,10 +320,15 @@ mcmc_trace(multiple_polynomial_fit, regex_pars = "beta")
 ```{r}
 replicated_data_lin = denormalize_results(extract(multiple_linear_fit)$y_rep, orig_sd, orig_mean)
 replicated_data_pol = denormalize_results(extract(multiple_polynomial_fit)$y_rep, orig_sd, orig_mean)
+ppc_data = data.frame(original=original_target, linear=replicated_data_lin, polynomial=replicated_data_pol)
 
-p1 = hist(replicated_data_lin, breaks = 50)
-p1 = hist(replicated_data_pol, breaks = 50)
-p2 = hist(original_target, breaks = 50)
+#plot(density(replicated_data_lin))
+#plot(density(replicated_data_pol))
+#plot(density(original_target))
+ggplot(ppc_data) +
+  geom_density()
+#p1 = hist(replicated_data_pol, breaks = 50, )
+#p2 = hist(original_target, breaks = 50)
 
 #hist(exp(replicated_data), breaks = 50)
 #hist(exp(original_target), breaks = 100)
