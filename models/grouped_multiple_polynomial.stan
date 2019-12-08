@@ -36,6 +36,7 @@ model {
 generated quantities {
   vector[N_pred] y_pred;
   vector[N] log_lik;
+  vector[N] y_rep;
   
   for (i in 1:N_pred) {
     y_pred[i] = normal_rng(alpha[groups_pred[i]] + X_pred[i] * beta+ X_pred_second[i] * beta_second, sigma);
@@ -43,6 +44,7 @@ generated quantities {
 
   for (i in 1:N) {
     log_lik[i] = normal_lpdf(y[i] | alpha[groups[i]] + X[i] * beta + X_second[i] * beta_second, sigma);
+    y_rep[i] = normal_rng( alpha[groups[i]] + X[i] * beta + X_second[i] * beta_second, sigma);
   }
 }
   
