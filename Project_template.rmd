@@ -15,7 +15,9 @@ knitr::opts_chunk$set(dpi=200)
 
 # 1. Introduction
 
-Online services such as zillow zestimates [1] provide accuarate information on how much houses sell for using gathered data, providing useful information for the realtor and the person selling the house. This notebook explores the possibilities on using stan to build regression models to predict housing prices on an zipcode level.     
+Online services such as zillow zestimates [1] provide accuarate information on how much houses sell for using gathered data, providing useful information for the realtor and the person selling the house. This notebook explores the possibilities on using stan to build regression models to predict housing prices on an zipcode level and explores how the different variables effect the price. 
+
+For this purpose we conduct an small data exploration on an real world dataset. Fit two competing models an an linear and an nonlinear varying intercept model. Compare their performance on a test set and through model diagnostics. Finally we conclude with a discussion of the results.   
 
 [1] https://www.zillow.com/zestimate/
 
@@ -40,7 +42,8 @@ set.seed(42)
 
 # 2. Dataset description
 
-For the prediction task we have chosen House Sales in King County, USA dataset [2], which provides data for the houses sold between May 2014 / May 2015 in the area in an regression friendly form.   
+For the prediction task we have chosen House Sales in King County, USA dataset [2], which provides data for the houses sold between May 2014 / May 2015 in the area in an regression friendly form. We transform the price dependant variable on a log-scale and the independent variables to 0 mean and 1 variance (mean center and unit variance scale) to guarantee better numerical accuracy and faster convergence. We also remove variables sqft_above and sqft_basement from the dataset as they are colinear wth sqft_living. 
+
 [2] https://www.kaggle.com/harlfoxem/housesalesprediction
 
 ```{r}
@@ -60,6 +63,7 @@ datecol <- as.POSIXct(houseprice$date, format="%Y%m%dT%H%M%S")
 houseprice$date_num = as.numeric(datecol)
 unique_zips = unique(houseprice$zipcode)
 houseprice$mutated_zipcode = match(houseprice$zipcode,  unique_zips)
+
 head(houseprice)
 ```
 
@@ -67,9 +71,9 @@ head(houseprice)
 M <- cor(houseprice[-2], method="spearman")
 corrplot(M, method = "circle")
 ```
+As the used dataset contains multiple predictors with linear and non-linear depencies, we use lasso regression to perform variable selection on the dataset to find an smaller subset of predictor variables to use in our model. This is neccessary for the purposes of the notebook to speed up the calculations and to better guarantee convergence. Also, the lasso regression plot beneath suggests that most of the variance in price can be explain by a much smaller subset of features.
 
-As the used dataset contains multiple predictors with linear and non-linear depencies, we use lasso regression to perform variable selection on the dataset to find an smaller subset of predictor variables to use in our model. This is neccessary for the purposes of the notebook to speed up the calculations and to better guarantee convergence. 
-!Notice that Lasso regression estimates are calculated using an linear model so they might not be the best predictors for an non-linear model. 
+!!! Notice that Lasso regression estimates are calculated using an linear model so they might not be the best predictors for an non-linear model. 
 
 ```{R}
 houseprice_scaled <- mutate_if(houseprice, is.numeric, list(~scale(.) %>% as.vector))
@@ -80,35 +84,38 @@ ridge_regression <- glmnet(y=data.matrix(response), x=data.matrix(obs), alpha = 
 plot_glmnet(ridge_regression, xvar = "lambda", label = TRUE)
 ```
 
-From the lasso regression plot we can see that: sqft_living, grade, lat, view, waterfront, yr_built, sqft_living15, bathrooms and long are the 9 best variables for the model.
+From the lasso regression plot we can see that: sqft_living, grade, lat, view, waterfront and yr_built are the 6 best variables for the model.
 When they are plotted in the matrix plot underneath, we can see that they chosen variables exhibit various linear and nonlinear effects on price.
-We choose all of these variables for the stan model except for the waterfront variable. Waterfront variable is not used as its binary nature causes problems in convergence in the case of polynomial model used.
+
+We choose 5 of these variables for the stan model except for the waterfront variable as its binary nature causes problems in convergence in the case of polynomial model used.
 
 ```{r,fig.height = 9, fig.width = 9}
-ggpairs(houseprice  %>% select(price, sqft_living, grade, lat, view, waterfront, yr_built, 
-                               sqft_living15, bathrooms, long))
+ggpairs(houseprice  %>% select(price, sqft_living, grade, lat, view,waterfront,yr_built))
 ```
 
 
 # 3. Model description
 
-We fit two varying intercept regression models: an multiple linear and an multiple polynomial model. Varying intercept models are multilevel models, which make use of partial pooling 
+We fit two varying intercept regression models: an multiple linear and an multiple polynomial model. Varying intercept models [3] are multilevel models, which let the intercept parameter vary between the groups while sharing the slope parameters. This is useful as the different zipcodes likely have different price levels that we can take into account in the intercept. We also could consider varying slope parameters by the category, but getting the model to convergece with this little data would likely be difficult.  
+
+
+[3] https://psmits.github.io/paleo_book/varying-intercept-models.html
 
 ## 3.1 Prior choices
 
-In [3] it is recommended to scale the parameters to unit scale and to use student-t distribution $t_\nu(0, 1)$, where $3<\nu<7$, as a prior for linear regression coefficients. Student-t distribution has heavier tails than a normal distribution, but less heavy tails than a cauchy distribution, making it able to predict further away values while still keeping most of the mass near the mean.
+In [4] it is recommended to scale the parameters to unit scale and to use student-t distribution $t_\nu(0, 1)$, where $3<\nu<7$, as a prior for linear regression coefficients. Student-t distribution has heavier tails than a normal distribution, but less heavy tails than a cauchy distribution, making it able to predict further away values while still keeping most of the mass near the mean.
 
 $$
 t_{\nu_{pdf}} = \frac{\Gamma\frac{\nu+1}{2}}{\sqrt{\nu\pi}\Gamma\frac{\nu}{2}}\bigg(1+\frac{x^2}{\nu}\bigg)^{-\frac{\nu+1}{2}}
 $$
 
-[3] https://github.com/stan-dev/stan/wiki/Prior-Choice-Recommendations#prior-for-linear-regression
+[4] https://github.com/stan-dev/stan/wiki/Prior-Choice-Recommendations#prior-for-linear-regression
 
 ## 3.2 Stan models
 
-We have built the models using stan radon case study [4] as a starting point to build our regression models. We have expanded on the varying intercept model of the example by adding multiple linear and polynomial terms into the model. In our model intercept parameters vary by the zipcode while the slope parameters are shared across zipcodes.
+We have built the models using stan radon case study [6] as a starting point to build our regression models. We have expanded on the varying intercept model of the example by adding multiple linear and polynomial terms into the model. In our model intercept parameters vary by the zipcode while the slope parameters are shared across zipcodes.
 
-[4] https://mc-stan.org/users/documentation/case-studies/radon.html
+[6] https://mc-stan.org/users/documentation/case-studies/radon.html
 
 
 ### Grouped multiple linear
@@ -136,17 +143,16 @@ cat(readLines('models/grouped_multiple_polynomial.stan'), sep='\n')
 
 ## 3.3 Running the models
 
-We train the models on 80%/20%-test split using 10000 first datapoints. Using all datapoints is possible, but R-will run out of memory while plotting.
+We train the models on 80%/20%-test split using 10000 first datapoints. Separate models are fitted for all the 71 zipcodes.
 
 ```{r}
-usable_numeric_columns = c("sqft_living", "grade","view", "lat", "yr_built", 
-                           "sqft_living15","long", "bathrooms")
+usable_numeric_columns = c("sqft_living", "grade","view", "lat", "yr_built")
 ```
 
 
 ```{r}
-training_indices = 0:8000
-testing_indices = 8001:10000
+training_indices = 0:1000
+testing_indices = 1001:2000
 
 used_columns = usable_numeric_columns
 target_column = c("log_price")
