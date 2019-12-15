@@ -71,6 +71,11 @@ corrplot(M, method = "circle")
 As the used dataset contains multiple predictors with linear and non-linear depencies, we use lasso regression to perform variable selection on the dataset to find an smaller subset of predictor variables to use in our model. This is neccessary for the purposes of the notebook to speed up the calculations and to better guarantee convergence. 
 !Notice that Lasso regression estimates are calculated using an linear model so they might not be the best predictors for an non-linear model. 
 
+```{r}
+hist(houseprice$log_price, breaks=50, main="Histogram of logarithm of house prices")
+```
+
+
 ```{R}
 houseprice_scaled <- mutate_if(houseprice, is.numeric, list(~scale(.) %>% as.vector))
 
@@ -197,15 +202,25 @@ orig_mean = mean(original_target)
 ```
 
 ```{r}
-predicted_draws = extract(multiple_linear_fit)$y_pred
-predicted_raws = colQuantiles(predicted_draws, probs = c(0.05, 0.5, 0.95))
-predicted_prices = denormalize_results(predicted_raws, orig_sd, orig_mean)
+#predicted_draws = extract(multiple_linear_fit)$y_pred
+#predicted_raws = colQuantiles(predicted_draws, probs = c(0.05, 0.5, 0.95))
+#predicted_prices = denormalize_results(predicted_raws, orig_sd, orig_mean)
+rep_prices = extract(multiple_linear_fit)$y_rep %>% colQuantiles(probs = c(0.05, 0.5, 0.95)) %>% denormalize_results(orig_sd, orig_mean)
 ```
 
 
 ```{r}
-result_testing = data.frame(price = testing_target, predicted = predicted_prices)
+result_testing = data.frame(price = exp(testing_target), predicted = exp(predicted_prices))
 ggpairs(result_testing, columns = c("price", "predicted.50."))
+```
+
+```{r}
+result_rep = data.frame(price = exp(original_target[training_indices]), predicted = exp(rep_prices))
+ggpairs(result_rep, columns = c("price", "predicted.50."))
+mae(exp(original_target[training_indices]),exp(rep_prices))
+rep_order = order(original_target[training_indices])
+rep_error = abs(exp(original_target[training_indices]) - exp(rep_prices))
+plot(original_target[training_indices][testing_rising_order], rep_error[testing_rising_order], col="#00000018", ylab = "error", xlab = "log price", main = "Error per log(price)")
 ```
 
 
@@ -213,7 +228,14 @@ ggpairs(result_testing, columns = c("price", "predicted.50."))
 mae_lin = mae(exp(testing_target),exp(predicted_prices))
 mae_lin
 ```
-
+```{r}
+testing_rising_order = order(testing_target)
+error = abs(exp(testing_target) - exp(predicted_prices))
+plot(testing_target[testing_rising_order], error[testing_rising_order], col="#00000018", ylab = "error", xlab = "log price", main = "Error per log(price)")
+lines(c(0, 20000), c(150000, 150000), col = "#ff000080")
+#hist(error, breaks = 500, xlim = c(0, 2e6))
+#lines(c(150000, 150000), c(0, 20000), col = "red")
+```
 
  
 ```{r}
