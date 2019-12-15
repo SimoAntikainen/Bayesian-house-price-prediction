@@ -25,6 +25,8 @@ For this purpose we conduct an small data exploration on an real world dataset. 
 ```{r,message=FALSE, warning=FALSE}
 library(rstan)
 options(mc.cores = 4)#parallel::detectCores())
+library(loo)
+library(bayesplot)
 library(ggplot2)
 library(matrixStats)
 library(dplyr)
@@ -35,8 +37,7 @@ library(ElemStatLearn)
 library(glmnet)
 library(plotmo)
 library(Metrics)
-library(bayesplot)
-library(loo)
+source('stan_utility.R')
 set.seed(42)
 ```
 
@@ -297,34 +298,40 @@ From the plots of the models we can see that all model parameters have converged
 ## Grouped multiple linear
 
 ```{r}
-print(multiple_linear_fit, pars = c("alpha", "beta"))
+check_all_diagnostics(multiple_linear_fit)
 ```
+
+```{r}
+p <- plot(multiple_linear_fit, pars = "beta", regex_pars = "period",  
+          prob = 0.5, prob_outer = 0.9)
+p + ggplot2::ggtitle("Posterior medians \n with 50% and 90% intervals")
+```
+
+
+
 
 ```{R}
 posterior_divergences <- as.array(multiple_linear_fit)
 mcmc_trace(multiple_linear_fit, regex_pars = "beta")
 ```
 
-```{r}
-#past tree depth
-get_num_max_treedepth(multiple_linear_fit)
-```
-
 ## Grouped multiple polynomial
 
 
 ```{r}
-print(multiple_polynomial_fit,  pars = c("alpha", "beta", "beta_second"))
+#print(multiple_polynomial_fit,  pars = c("alpha", "beta", "beta_second"))
+check_all_diagnostics(multiple_linear_fit)
+```
+
+```{r}
+p <- plot(multiple_polynomial_fit, pars = "beta", regex_pars = "period",  
+          prob = 0.5, prob_outer = 0.9)
+p + ggplot2::ggtitle("Posterior medians \n with 50% and 90% intervals")
 ```
 
 
 ```{R}
 mcmc_trace(multiple_polynomial_fit, regex_pars = "beta")
-```
-
-```{R}
-#past tree depth
-get_num_max_treedepth(multiple_polynomial_fit)
 ```
 
 # 5. Posterior predictive checking
