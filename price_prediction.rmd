@@ -39,6 +39,7 @@ library(plotmo)
 library(Metrics)
 source('stan_utility.R')
 set.seed(42)
+
 ```
 
 # 2. Dataset description
@@ -121,7 +122,7 @@ $$
 
 We have built the models using stan radon case study [6] as a starting point to build our regression models. We have expanded on the varying intercept model of the example by adding multiple linear and polynomial terms into the model. In our model intercept parameters vary by the zipcode while the slope parameters are shared across zipcodes.
 
-[6] https://mc-stan.org/users/documentation/case-studies/radon.html
+[5] https://mc-stan.org/users/documentation/case-studies/radon.html
 
 
 ### Grouped multiple linear
@@ -149,7 +150,7 @@ cat(readLines('models/grouped_multiple_polynomial.stan'), sep='\n')
 
 ## 3.3 Running the models
 
-We train the models on 80%/20%-test split using 10000 first datapoints. Separate models are fitted for all the 71 zipcodes.
+We train the models on 80%/20%-test split using 10000 first datapoints. Models are fitted for all the 71 zipcodes. Full data is not used as loo fails with large datasets.
 
 ```{r}
 usable_numeric_columns = c("sqft_living", "grade","view", "lat", "yr_built")
@@ -157,8 +158,8 @@ usable_numeric_columns = c("sqft_living", "grade","view", "lat", "yr_built")
 
 
 ```{r}
-training_indices = 0:1000
-testing_indices = 1001:2000
+training_indices = 0:8000
+testing_indices = 8001:10000
 
 used_columns = usable_numeric_columns
 target_column = c("log_price")
@@ -190,6 +191,13 @@ data_list = list(
 head(X_var)
 ```
 
+```{r}
+denormalize_results <- function(new_values, sd, mean){
+  return (new_values * sd + mean)
+}
+orig_sd = sd(original_target)
+orig_mean = mean(original_target)
+```
 
 
 ### Grouped multiple linear
@@ -199,42 +207,51 @@ head(X_var)
 multiple_linear_fit <- stan(file = 'models/grouped_multiple_linear.stan', data = data_list)
 ```
 
-
 ```{r}
-denormalize_results <- function(new_values, sd, mean){
-  return (new_values * sd + mean)
-}
-orig_sd = sd(original_target)
-orig_mean = mean(original_target)
-```
-
-```{r}
-#predicted_draws = extract(multiple_linear_fit)$y_pred
-#predicted_raws = colQuantiles(predicted_draws, probs = c(0.05, 0.5, 0.95))
-#predicted_prices = denormalize_results(predicted_raws, orig_sd, orig_mean)
+predicted_draws = extract(multiple_linear_fit)$y_pred
+predicted_raws = colQuantiles(predicted_draws, probs = c(0.05, 0.5, 0.95))
+predicted_prices = denormalize_results(predicted_raws, orig_sd, orig_mean)
 rep_prices = extract(multiple_linear_fit)$y_rep %>% colQuantiles(probs = c(0.05, 0.5, 0.95)) %>% denormalize_results(orig_sd, orig_mean)
 ```
 
-
 ```{r}
-result_testing = data.frame(price = exp(testing_target), predicted = exp(predicted_prices))
+result_testing = data.frame(price = (testing_target), predicted = (predicted_prices))
 ggpairs(result_testing, columns = c("price", "predicted.50."))
 ```
 
 ```{r}
-result_rep = data.frame(price = exp(original_target[training_indices]), predicted = exp(rep_prices))
-ggpairs(result_rep, columns = c("price", "predicted.50."))
-mae(exp(original_target[training_indices]),exp(rep_prices))
-rep_order = order(original_target[training_indices])
-rep_error = abs(exp(original_target[training_indices]) - exp(rep_prices))
-plot(original_target[training_indices][testing_rising_order], rep_error[testing_rising_order], col="#00000018", ylab = "error", xlab = "log price", main = "Error per log(price)")
+#result_rep = data.frame(price = exp(original_target[training_indices]), predicted = exp(rep_prices))
+#ggpairs(result_rep, columns = c("price", "predicted.50."))
+#mae(exp(original_target[training_indices]),exp(rep_prices))
+#rep_order = order(original_target[training_indices])
+#rep_error = abs(exp(original_target[training_indices]) - exp(rep_prices))
+#plot(original_target[training_indices][testing_rising_order], rep_error[testing_rising_order], col="#00000018", ylab = "error", xlab = "log price", main = "Error per log(price)")
 ```
 
+We can see that the best parameters correspond to lasso regression best parameters. Fourth parameter corresponding to view quality has a very wide posterior distribution. 
+
+```{r}
+posterior_linear <- as.matrix(multiple_linear_fit)
+posterior_linear <- posterior_linear[,c("beta[1]", "beta[2]","beta[3]","beta[4]","beta[5]")]
+
+
+plot_title <- ggtitle("Posterior distributions multiple polynomial",
+                      "with medians and 80% intervals")
+
+mcmc_areas(posterior_linear,
+           pars = c("beta[1]", "beta[2]","beta[3]","beta[4]","beta[5]"),
+           prob = 0.8) + plot_title
+```
+
+Mean absolute error is quite large
 
 ```{r}
 mae_lin = mae(exp(testing_target),exp(predicted_prices))
 mae_lin
 ```
+
+The error increases as a function of price
+
 ```{r}
 testing_rising_order = order(testing_target)
 error = abs(exp(testing_target) - exp(predicted_prices))
@@ -244,8 +261,8 @@ lines(c(0, 20000), c(150000, 150000), col = "#ff000080")
 #lines(c(150000, 150000), c(0, 20000), col = "red")
 ```
 
- 
 ```{r}
+#TODO: Redo the zipcode plot
 violin_predicted = extract(multiple_linear_fit)$y_pred
 violin_predicted = exp(denormalize_results(violin_predicted, orig_sd, orig_mean))
 #violin_predicted = exp(predicted_prices)
@@ -288,7 +305,6 @@ data_list = list(
 ```
 
 
-
 ```{r}
 multiple_polynomial_fit <- stan(file = 'models/grouped_multiple_polynomial.stan',
                                 data = data_list)
@@ -307,30 +323,59 @@ ggpairs(result_testing, columns = c("price", "predicted.50."))
 ```
 
 
+
+From the first order polynomial part the parameters, which had the most effect correspond to lasso regression best parameters. 
+
+```{r}
+posterior_polynomial <- as.matrix(multiple_polynomial_fit)
+posterior_polynomial <- posterior_polynomial[,c("beta[1]", "beta[2]","beta[3]","beta[4]","beta[5]",
+                                  "beta_second[1]", "beta_second[2]","beta_second[3]","beta_second[4]","beta_second[5]")]
+
+
+plot_title <- ggtitle("Posterior distributions multiple polynomial",
+                      "with medians and 80% intervals")
+
+mcmc_areas(posterior_polynomial,
+           pars = c("beta[1]", "beta[2]","beta[3]","beta[4]","beta[5]"),
+           prob = 0.8) + plot_title
+```
+
+
+```{r}
+plot_title <- ggtitle("Posterior distributions multiple polynomial 2 degree slope",
+                      "with medians and 80% intervals")
+
+mcmc_areas(posterior_polynomial,
+           pars = c("beta_second[1]", "beta_second[2]","beta_second[3]","beta_second[4]","beta_second[5]"),
+           prob = 0.8) + plot_title
+```
+
+Mean absolute error still is quite large, but there is a small improved compared to linear model.
+
 ```{r}
 mae_pol = mae(exp(testing_target),exp(predicted_prices))
 mae_pol
 ```
 
+```{r}
+testing_rising_order = order(testing_target)
+error = abs(exp(testing_target) - exp(predicted_prices))
+plot(testing_target[testing_rising_order], error[testing_rising_order], col="#00000018", ylab = "error", xlab = "log price", main = "Error per log(price)")
+lines(c(0, 20000), c(150000, 150000), col = "#ff000080")
+#hist(error, breaks = 500, xlim = c(0, 2e6))
+#lines(c(150000, 150000), c(0, 20000), col = "red")
+```
+
 
 # 4. Convergence diagnostics
 
-From the plots of the models we can see that all model parameters have converged.
-
 ## Grouped multiple linear
+
+From the model diagnostics we can see that that the model has converged.
 
 ```{r}
 check_all_diagnostics(multiple_linear_fit)
 ```
-
-```{r}
-p <- plot(multiple_linear_fit, pars = "beta", regex_pars = "period",  
-          prob = 0.5, prob_outer = 0.9)
-p + ggplot2::ggtitle("Posterior medians \n with 50% and 90% intervals")
-```
-
-
-
 
 ```{R}
 posterior_divergences <- as.array(multiple_linear_fit)
@@ -339,6 +384,7 @@ mcmc_trace(multiple_linear_fit, regex_pars = "beta")
 
 ## Grouped multiple polynomial
 
+From the model diagnostics we can see that that the model has converged.
 
 ```{r}
 #print(multiple_polynomial_fit,  pars = c("alpha", "beta", "beta_second"))
@@ -346,19 +392,12 @@ check_all_diagnostics(multiple_linear_fit)
 ```
 
 ```{r}
-p <- plot(multiple_polynomial_fit, pars = "beta", regex_pars = "period",  
-          prob = 0.5, prob_outer = 0.9)
-p + ggplot2::ggtitle("Posterior medians \n with 50% and 90% intervals")
-```
-
-
-```{R}
 mcmc_trace(multiple_polynomial_fit, regex_pars = "beta")
 ```
 
 # 5. Posterior predictive checking
 
-We can see that replicated data is indistinguishable from the target
+From the plot beneath, we can see that replicated data is nearly indistinguishable from the target
 
 ```{r}
 replicated_data_lin = denormalize_results(extract(multiple_linear_fit)$y_rep, orig_sd, orig_mean)
@@ -372,10 +411,13 @@ legend(x="topright",
        col=c("red", "blue", "black"), lty=1:1, cex=0.8)
 ```
 
+## Multiple linear model Leave-One-Out (LOO) predictive checks
+
+Loo pit plot suggests that our model is not able to predict all the variance in the data.
 
 ```{r}
 original_training_order = order(original_target[training_indices])
-loo_lin <- loo(multiple_linear_fit, save_psis = TRUE)
+loo_lin <- loo(multiple_linear_fit, save_psis = TRUE,cores = getOption("mc.cores", 4))
 psis_lin <- loo_lin$psis_object
 lw_lin <- weights(psis_lin)
 pp_check(c(original_target[training_indices]), yrep = replicated_data_lin, fun = "stat")
@@ -387,6 +429,11 @@ ppc_loo_ribbon(c(original_target[training_indices][original_training_order]),
 ppc_loo_intervals(c(original_target[training_indices]),
                   yrep = replicated_data_lin, psis_object = psis_lin)
 ```
+
+
+## Multiple polynomial model Leave-One-Out (LOO) predictive checks
+
+Loo pit plot suggests that our model is not able to predict all the variance in the data.
 
 ```{r}
 
@@ -406,16 +453,18 @@ ppc_loo_intervals(c(original_target[training_indices]),
 
 # 6. Predictive performance assesment
 
-From the mean squared errors we can see that the polynomial model performed better on the test set 
+From the mean squared errors we can see that the polynomial model performed better on the test set
+
 ```{r}
 # compare errors
 data.frame(linear = mae_lin, polynomial = mae_pol)
 ```
 
-
 ## PSIS-lOO 
 
-Obtained elpd information criteria values of the two models are largely the same with the polynomial model having an larger value, suggesting it is better of the two models. The k-values of the models are small suggesting the models fit the data well. 
+Obtained elpd information criteria values of the two models are largely the same with the polynomial model having an larger value, suggesting it is better of the two models. The k-values of the models are small expect for one observations for both models suggesting the models fit the data well. The bad k-value is likely caused by the number of observations being too small as I was not able to run the model with the whole dataset. Still the model might be misspesified as p_loo < number of parameters, which corresponds to model being too flexible or having too weak of a population prior [6].       
+
+[6] https://mc-stan.org/loo/reference/loo-glossary.html
 
 ### Multiple linear regression
 
@@ -439,7 +488,6 @@ pareto_k_table(multiple_linear_loo_lin)
 ```{r}
 plot(multiple_linear_loo_lin, diagnostic = c("k", "n_eff"), label_points = FALSE,
   main = "PSIS diagnostic plot for ther multiple linear model")
-
 ```
 
 
@@ -466,7 +514,9 @@ plot(multiple_polynomial_loo_lin, diagnostic = c("k", "n_eff"), label_points = F
   main = "PSIS diagnostic plot for ther multiple polynomial model")
 ```
 
-## p_eff values
+## elpd_loo comparison
+
+Polynomial Model is sligtly better according to elped information criteria.
 
 ```{R}
 loo_compare(x = list(multiple_linear_loo_lin, multiple_polynomial_loo_lin))
@@ -474,10 +524,11 @@ loo_compare(x = list(multiple_linear_loo_lin, multiple_polynomial_loo_lin))
 
 # 7. Discussion
 
-In this report we have explored linear and polynomial regression models for predicting house prices. The differences between the results from the models are small, but the polynomial model performs a bit better. The mean absolute error for both models is over hundred thousand, but considering the mean of the prices is around five hundred thousand, some error is to be expected. Overall the results follow the true data.
+In this report we have explored linear and polynomial regression models for predicting house prices. The differences between the results from the models are small, but the polynomial model performs a bit better. The mean absolute error for both models is over hundred thousand, but considering the mean of the prices is around five hundred thousand, the error rate is small considering the simplicity of the model.
 
-In the future we could consider varying slope parameter by zipcode, but this has few obvious drawbacks.
-There are 70 groups, so using a different beta value for each parameter for each group would increase the number of parameters of the model by 2-17 times, likely slowing the model. In addition, the number of data usable for each beta value would shrink. The dataset is large, so using most of the dataset for training, it shouldn't be a problem but with less data it could lead to overfitting. Practically it would mean that there is no relation between the effects of the parameters between different groups, e.g. the size of the building could increase price somewhere and decrease it elsewhere, which sounds counterintuitive, but could still be an avenue for future research.
+In the future we could consider varying slope parameter by zipcode. This would mean the different predictors would have different effects in the model depending on the zipcode they belong to, which would help us to better undestand how different factors effect housing prices in geograhical areas. However this has few techical drawbacks. There are 70 groups, so using a different beta value for each parameter for each group would increase the number of parameters of the model considerably, likely slowing the model. In addition, the number of data usable for each beta value would shrink, which likely would lead to problems in convergence and biased estimates. 
+
+
 
 
 
